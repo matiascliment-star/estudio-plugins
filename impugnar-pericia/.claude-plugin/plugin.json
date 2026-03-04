@@ -1,0 +1,9 @@
+{
+  "name": "impugnar-pericia",
+  "version": "1.0.0",
+  "description": "Controla y genera impugnaciones de pericias medicas laborales. Analiza la pericia contra el baremo Decreto 659/96, cruza datos con la demanda, detecta errores del perito y genera el escrito de impugnacion.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["pericia", "impugnacion", "baremo", "659", "laboral", "medica", "perito", "incapacidad", "pjn", "scba"]
+}

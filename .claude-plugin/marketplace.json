@@ -47,6 +47,13 @@
       "source": "./liquidacion-judicial",
       "description": "Practicar y controlar liquidaciones judiciales argentinas",
       "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "impugnar-pericia",
+      "version": "1.0.0",
+      "source": "./impugnar-pericia",
+      "description": "Controla y genera impugnaciones de pericias medicas laborales",
+      "author": { "name": "Matias Climent" }
     }
   ]
 }
