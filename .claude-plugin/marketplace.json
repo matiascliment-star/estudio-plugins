@@ -1,0 +1,52 @@
+{
+  "name": "estudio-plugins",
+  "version": "1.0.0",
+  "description": "Plugins del Estudio García Climent para Cowork",
+  "owner": {
+    "name": "Estudio García Climent"
+  },
+  "plugins": [
+    {
+      "name": "cpacf-calculator",
+      "version": "1.0.0",
+      "source": "./cpacf-calculator",
+      "description": "Calculador de intereses moratorios del CPACF",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "jud-tools",
+      "version": "1.0.0",
+      "source": "./jud-tools",
+      "description": "Herramientas judiciales MCP: PJN, MEV, SCBA, CSJN",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "zonaprop-scanner",
+      "version": "1.0.0",
+      "source": "./zonaprop-scanner",
+      "description": "Analisis visual de propiedades ZonaProp desde Supabase",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "escritos-judiciales",
+      "version": "1.0.0",
+      "source": "./escritos-judiciales",
+      "description": "Subir escritos y borradores a PJN y MEV/SCBA",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "inicio-srt",
+      "version": "1.0.0",
+      "source": "./inicio-srt",
+      "description": "Genera relatos de accidentes laborales y rellena Anexo I SRT",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "liquidacion-judicial",
+      "version": "1.0.0",
+      "source": "./liquidacion-judicial",
+      "description": "Practicar y controlar liquidaciones judiciales argentinas",
+      "author": { "name": "Matias Climent" }
+    }
+  ]
+}

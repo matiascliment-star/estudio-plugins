@@ -1,0 +1,9 @@
+{
+  "name": "jud-tools",
+  "version": "1.0.0",
+  "description": "Herramientas judiciales MCP: PJN, MEV, SCBA, CSJN - expedientes, movimientos, documentos, cedulas, escritos, fallos.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["judicial", "scraper", "pjn", "mev", "scba", "csjn", "expedientes", "legal", "cedulas", "notificaciones", "provincia", "fallos", "sentencias"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "inicio-srt",
+  "version": "0.1.0",
+  "description": "Genera relatos de accidentes laborales, manifiesta lesiones y rellena el Anexo I de la SRT a partir de la ficha del cliente",
+  "author": {
+    "name": "Matias Christian García Climent"
+  },
+  "keywords": ["demanda", "laboral", "accidente", "SRT", "lesiones", "relato"]
+}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cpacf": {
+      "type": "http",
+      "url": "https://web-production-b01ac.up.railway.app/mcp",
+      "headers": {
+        "X-API-Key": "cpacf-mcp-railway-2024-secure-key"
+      }
+    }
+  }
+}

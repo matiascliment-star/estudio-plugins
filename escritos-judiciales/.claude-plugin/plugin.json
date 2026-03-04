@@ -1,0 +1,9 @@
+{
+  "name": "escritos-judiciales",
+  "version": "1.0.0",
+  "description": "Comandos para subir escritos y borradores a los sistemas judiciales argentinos (PJN y MEV/SCBA). Convierte escritos a PDF o HTML y los guarda como borradores usando las APIs correspondientes.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["escritos", "borradores", "pjn", "mev", "scba", "judicial", "provincia", "nacion"]
+}

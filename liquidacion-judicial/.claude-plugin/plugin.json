@@ -1,0 +1,9 @@
+{
+  "name": "liquidacion-judicial",
+  "version": "0.1.0",
+  "description": "Plugin para practicar y controlar liquidaciones judiciales argentinas. Integra el scraper de PJN para obtener sentencias con el calculador de intereses del CPACF para verificar cada rubro.",
+  "author": {
+    "name": "Mati"
+  },
+  "keywords": ["liquidacion", "judicial", "pjn", "cpacf", "intereses", "argentina"]
+}

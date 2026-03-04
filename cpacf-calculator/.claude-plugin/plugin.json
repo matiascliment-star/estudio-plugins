@@ -1,0 +1,9 @@
+{
+  "name": "cpacf-calculator",
+  "version": "0.1.0",
+  "description": "Calculador de intereses moratorios del CPACF (Colegio Público de Abogados de la Capital Federal). Permite calcular intereses judiciales usando las tasas oficiales (Tasa Activa BNA, Pasiva, CER, etc.) directamente desde Claude.",
+  "author": {
+    "name": "Matías García Climent"
+  },
+  "keywords": ["cpacf", "intereses", "liquidacion", "judicial", "tasas", "argentina"]
+}
