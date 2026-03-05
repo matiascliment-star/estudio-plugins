@@ -54,6 +54,13 @@
       "source": "./impugnar-pericia",
       "description": "Controla y genera impugnaciones de pericias medicas laborales",
       "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "alegato-judicial",
+      "version": "1.0.0",
+      "source": "./alegato-judicial",
+      "description": "Genera alegatos judiciales completos a partir de la prueba producida en el expediente",
+      "author": { "name": "Matias Climent" }
     }
   ]
 }
