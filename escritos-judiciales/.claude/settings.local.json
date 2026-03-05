@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__judicial__scba_guardar_borrador",
+      "mcp__judicial__scba_guardar_borrador_adjuntos",
+      "mcp__judicial__scba_info_causa",
+      "mcp__judicial__scba_listar_presentaciones",
+      "mcp__judicial__mev_listar_causas",
+      "mcp__judicial__mev_obtener_movimientos",
+      "mcp__judicial__pjn_guardar_borrador",
+      "mcp__judicial__pjn_buscar_expediente",
+      "mcp__judicial__pjn_info_escrito",
+      "mcp__judicial__pjn_listar_expedientes",
+      "mcp__judicial__pjn_obtener_movimientos",
+      "Bash(python3:*)",
+      "Bash(pip install:*)"
+    ]
+  }
+}

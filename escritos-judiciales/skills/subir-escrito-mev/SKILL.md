@@ -53,8 +53,8 @@ El sistema SCBA espera HTML simple que se renderiza en CKEditor. No hace falta C
 def texto_a_html_scba(texto, titulo):
     """Convierte texto del escrito a HTML para SCBA."""
 
-    # Título/sumario arriba a la derecha
-    html = f'<p style="text-align: right;"><strong>{titulo.upper()}</strong></p>\n'
+    # Título/sumario: centrado, negrita, subrayado
+    html = f'<p style="text-align: center;"><strong><u>{titulo.upper()}</u></strong></p>\n'
     html += '<p>&nbsp;</p>\n'
 
     # Cuerpo del escrito
@@ -69,6 +69,8 @@ def texto_a_html_scba(texto, titulo):
 
     return html
 ```
+
+**IMPORTANTE sobre subrayado**: El título del escrito SIEMPRE debe llevar subrayado (`<u>` tag). CKEditor SCBA soporta `<u>` directamente. NO usar `style="text-decoration: underline"` con `<span>`, usar directamente la tag `<u>` que es más compatible.
 
 ### Si el input ya es HTML
 Usarlo directamente. Solo verificar que no tenga tags que CKEditor no soporte (como `<script>`, `<style>`, etc.).
