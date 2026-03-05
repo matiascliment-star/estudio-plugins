@@ -30,6 +30,7 @@ Antes de ejecutar el control, leer estos archivos de referencia:
 - `skills/impugnar-pericia/references/controles-pericia.md` — Checklist de controles
 - `skills/impugnar-pericia/references/plantilla-impugnacion.md` — Template del escrito
 - `skills/impugnar-pericia/references/argumentos-medico-legales.md` — Catalogo de argumentos legales
+- `skills/impugnar-pericia/references/modelos-impugnacion.md` — **42 modelos reales** de escritos del estudio, organizados por categoria (factores, rodilla, hernias, nervios, psiquica, causalidad, baremo, etc.). USAR COMO REFERENCIA PRINCIPAL de estilo, estructura y argumentacion
 
 ## Flujo de 7 Fases
 
