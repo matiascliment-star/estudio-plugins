@@ -1600,8 +1600,137 @@ Toda vez que una decisión que no admita las argumentaciones desarrolladas en es
 
 Asimismo, un pronunciamiento de esas características no constituiría derivación razonada del derecho vigente con aplicación a las constancias comprobadas de la causa, por lo que la reserva que se formula comprende el derecho de ocurrir ante el más Alto Tribunal Nacional, con fundamento en la doctrina de la arbitrariedad.
 
-							Proveer de conformidad, 
+							Proveer de conformidad,
 							      SERÁ JUSTICIA
+```
+
+---
+
+## Decreto 549/2025 aplicado retroactivamente
+
+### BARRIENTOS - PROVINCIA - TTU SM - 19233-2024 — Observa pericia por aplicacion retroactiva del Decreto 549/2025
+
+Caso: Accidente 08/11/2023 (impacto de ladrillo en muneca y mano izquierda). Perita aplico Decreto 549/2025 con capacidad restante generalizada. Comision Medica habia dado 0%. Accion de revision.
+
+**Observaciones planteadas:**
+1. Baremo aplicable 659/96, improcedencia de capacidad restante, incapacidad supera 50% T.O.
+2. Subsidiariamente: inconstitucionalidad del Decreto 549/2025
+3. Factor edad aritmetico (no porcentual)
+
+```
+PARTE ACTORA OBSERVA PERICIA MÉDICA - SE CORRA TRASLADO AL EXPERTO
+
+Excmo. Tribunal:
+
+MATÍAS CHRISTIAN GARCÍA CLIMENT, abogado, inscripto en el tomo 97, Folio 16 del C.P.A.C.F y tomo 46, Folio 393 del C.A.S.I, C.U.I.T Nº 20-31380619-8, IVA responsable inscripto, que se desempeña como parte integrante del "Estudio García Climent Abogados" CUIT 30-71548683-7, por su propio derecho y en calidad de letrado apoderado de la PARTE ACTORA, manteniendo domicilio procesal, e-mail: matiasgarciacliment@gmail.com, tel: 4-545-2488), y electrónico en 2031380618 20313806198@notificaciones.scba.gov.ar en los autos caratulados: "BARRIENTOS RUBEN LAUTARO C/ PROVINCIA ASEGURADORA DE RIESGOS DE TRABAJO S.A. S/ ACCIÓN DE REVISIÓN RESOLUCIÓN DE COMISIÓN MEDICA JURISDICCIONAL LEY 15057" (Expte. 19233), a V.E. respetuosamente dice:
+
+I. OBJETO
+
+Que viene por el presente a contestar el traslado conferido de la pericia médica presentada por la Dra. María Fernanda Goin (MP 442500), y a formular las observaciones que a continuación se detallan.
+
+II. OBSERVA PERICIA
+
+Sin que importe un menoscabo a la tarea de la Dra. María Fernanda Goin, observo la pericia en traslado y solicito que:
+
+OBSERVACIÓN Nº 1: Aplicación del baremo del Decreto 659/96 vigente al momento de la contingencia. Improcedencia de la fórmula de capacidad restante. Incapacidad que supera el 50% de la T.O.
+
+1.1. Baremo aplicable: Decreto 659/96.
+
+Observo la pericia en traslado en tanto la experta utilizó para la determinación de la incapacidad el baremo previsto en el Decreto N° 549/2025, cuando el baremo aplicable a la presente contingencia es el previsto en el Decreto N° 659/96, vigente al momento en que se produjo el siniestro laboral del actor (08/11/2023). Se explica:
+
+Es criterio pacífico y reiterado de la jurisprudencia que el baremo aplicable para la determinación de la incapacidad es aquel vigente al momento de la primera manifestación invalidante, esto es, la fecha del accidente o la fecha de toma de conocimiento de la enfermedad profesional. En el caso de autos, la contingencia se produjo el 8 de noviembre de 2023, fecha en la cual se encontraba vigente el Anexo I del Decreto N° 659/96 (y sus modificatorias). El Decreto N° 549/2025, utilizado por la perita, fue dictado con posterioridad y no resulta aplicable a hechos anteriores a su entrada en vigencia, en virtud del principio de irretroactividad de la ley (art. 7 del Código Civil y Comercial de la Nación).
+
+Nótese que la propia perita reconoce en su respuesta al punto 10) que aplica "los factores de ponderación conforme el Decreto 549/2025 (Tabla de Evaluación de Incapacidades Laborales), normativa vigente que sustituye al Decreto 659/96 y al Decreto 49/2014". Sin embargo, que la normativa sea "vigente" al momento de la pericia no la hace aplicable al caso, toda vez que lo que determina el baremo aplicable es la fecha de la contingencia, y no la fecha de la pericia.
+
+1.2. Consecuencia directa: improcedencia de la fórmula de capacidad restante (Balthazard).
+
+La aplicación errónea del Decreto 549/2025 no sólo afecta los porcentajes asignados a cada limitación funcional, sino que -fundamentalmente- condujo a la experta a aplicar la fórmula de capacidad restante (método de Balthazard) para combinar las distintas incapacidades parciales, metodología que el nuevo baremo impone de manera generalizada pero que resulta improcedente bajo el régimen del Decreto 659/96 vigente al momento del siniestro. Se explica:
+
+En sus conclusiones, la perita determinó las siguientes incapacidades parciales: mano izquierda 12%, muñeca izquierda 9%, nervio Mediano izquierdo 6% y RVAN con manifestación fóbico depresiva Grado II-III 20%. Sin embargo, al combinarlas, aplicó la fórmula de capacidad restante, obteniendo: mano izquierda 12% de CR 80% = 9,6%; muñeca izquierda 9% de CR 70,4% = 6,33%; nervio Mediano izquierdo 6% de CR 64,07% = 3,84%. De este modo, la aplicación de la fórmula de capacidad restante redujo artificialmente la incapacidad física total de 27% (suma aritmética: 12% + 9% + 6%) a tan solo 19,77% (9,6% + 6,33% + 3,84%), es decir, una reducción de más de 7 puntos porcentuales.
+
+La fórmula de capacidad restante tiene por finalidad evitar que la sumatoria de incapacidades provenientes de distintos eventos dañosos sucesivos supere el 100% de la capacidad obrera total. El Decreto 659/96 la prevé exclusivamente para la combinación de incapacidades derivadas de siniestros diferentes y previos, y no para la combinación de las distintas manifestaciones funcionales de un único traumatismo. El Decreto 549/2025, en cambio, introduce una aplicación generalizada de esta fórmula a todas las incapacidades parciales, incluso las derivadas del mismo hecho.
+
+En el caso de autos, todas las lesiones y secuelas que padece el Sr. Barrientos provienen de un único y mismo accidente ocurrido el 08/11/2023 (impacto de ladrillo en muñeca y mano izquierda). Las limitaciones funcionales de la mano, la muñeca, la lesión del nervio Mediano y las secuelas psicológicas son todas consecuencia directa y exclusiva del mismo hecho dañoso, tal como la propia experta reconoció al responder el punto 3 del cuestionario ("Las lesiones guardan relación causal directa con el accidente de fecha 08/11/2023") y al consignar expresamente que "No se detectan patologías preexistentes".
+
+Más aún: la propia Comisión Médica Jurisdiccional Nº 383 de General San Martín, en su Dictamen Médico de fecha 03/05/2024 (Expediente SRT 618936/23), determinó que el actor no presentaba secuelas generadoras de incapacidad laboral por este siniestro. Si la Comisión Médica consideró 0% de incapacidad previa -razón por la cual se inició la presente acción de revisión-, no existe capacidad residual inferior al 100% sobre la cual corresponda aplicar el método de Balthazard.
+
+En síntesis: bajo el Decreto 659/96 -único baremo aplicable- las incapacidades parciales derivadas del mismo accidente deben sumarse aritméticamente, sin aplicación de la fórmula de capacidad restante. La perita incurrió en este error porque aplicó la metodología de cálculo del Decreto 549/2025, que no correspondía utilizar.
+
+1.3. Incapacidad recalculada: supera el 50% de la T.O.
+
+Conforme los valores de incapacidad parcial determinados por la propia perita -que no se cuestionan en cuanto a las secuelas constatadas en el examen físico-, pero aplicando la suma aritmética que corresponde bajo el Decreto 659/96, la incapacidad total se discrimina de la siguiente manera:
+
+Incapacidades parciales (suma aritmética):
+RVAN con manifestación fóbico depresiva Grado II-III = 20%
+Limitación funcional mano izquierda (meñique 4% + pulgar 8%) = 12%
+Limitación funcional muñeca izquierda = 9%
+Lesión nervio Mediano izquierdo (Síndrome del Túnel Carpiano) = 6%
+Subtotal incapacidad = 47%
+
+Factores de ponderación (conforme Decreto 659/96):
+Dificultad para tareas habituales: INTERMEDIA = 10% de 47% = 4,70%
+Recalificación: No amerita = 0%
+Edad (31 años, suma directa conforme se fundamenta en la Observación Nº 3) = 2%
+Total factores = 6,70%
+
+INCAPACIDAD TOTAL = 47% + 6,70% = 53,70% de la T.O.
+
+Como puede apreciarse, la correcta aplicación del Decreto 659/96 con suma aritmética de las incapacidades parciales arroja una incapacidad total que supera el umbral del 50% de la T.O., con las significativas consecuencias que ello importa en el marco del sistema de la Ley 24.557 y sus modificatorias (art. 14 inc. 2 a), prestación de pago mensual complementaria). La reducción operada por la errónea aplicación de la fórmula de capacidad restante del Decreto 549/2025 no sólo perjudica cuantitativamente al trabajador, sino que lo coloca por debajo de un umbral legal con consecuencias cualitativas determinantes para la reparación integral del daño sufrido.
+
+Por lo expuesto, se solicita a la experta que recalcule la totalidad de las incapacidades parciales aplicando el baremo del Decreto 659/96 y utilizando la suma aritmética directa, prescindiendo de la fórmula de capacidad restante que sólo procede bajo el Decreto 549/2025. A todo evento, se le hace saber a la perito que, aun cuando en lo personal no comparta el criterio, igualmente realice el cálculo subsidiario a fin de que sea el juez de la causa quien determine, al momento de dictar sentencia, cuál es el baremo y el método de cálculo aplicable.
+
+OBSERVACIÓN Nº 2: Subsidiariamente, para el caso de que V.E. considere aplicable el Decreto 549/2025: inconstitucionalidad. Planteo y reserva.
+
+Sin perjuicio de lo expuesto en la Observación Nº 1 respecto del baremo aplicable, y para el supuesto de que V.E. considere aplicable el Decreto 549/2025, se plantea en este acto su inconstitucionalidad. Los fundamentos son los siguientes:
+
+a) Violación del principio de progresividad y no regresividad. El Decreto 549/2025 constituye una modificación estructural del sistema de valoración del daño laboral que reduce sistemáticamente los porcentajes de incapacidad reconocidos a los trabajadores, en franca violación del principio de progresividad consagrado en el art. 2.1 del Pacto Internacional de Derechos Económicos, Sociales y Culturales, el art. 26 de la Convención Americana sobre Derechos Humanos y el art. 1 del Protocolo de San Salvador. La reducción opera a través de múltiples mecanismos convergentes: exclusión de patologías prevalentes, eliminación del dolor como factor incapacitante, reducción drástica de porcentajes, imposición de metodologías de cálculo restrictivas -como la aplicación generalizada de la fórmula de capacidad restante- y establecimiento de topes arbitrarios.
+
+b) Reducción drástica e injustificada de porcentajes y aplicación generalizada de la capacidad restante. La tabla del Decreto 549/2025 no sólo asigna porcentajes sustancialmente inferiores a los del Decreto 659/96 para las mismas limitaciones funcionales, sino que -a diferencia del régimen anterior- impone la fórmula de capacidad restante para la combinación de todas las incapacidades parciales, incluso las derivadas del mismo siniestro. Este mecanismo opera como un factor de reducción adicional que carece de justificación médica y obedece exclusivamente al propósito de reducir el costo de las prestaciones dinerarias. En el caso de autos, la aplicación combinada de ambos mecanismos redujo la incapacidad total del actor de 53,70% (bajo el Decreto 659/96 con suma aritmética) a 45,33% (bajo el Decreto 549/2025 con capacidad restante), colocándolo artificialmente por debajo del umbral del 50%.
+
+c) Exceso reglamentario y violación del principio de legalidad. El art. 8° inc. 3 de la Ley 24.557 delegó al Poder Ejecutivo la elaboración de una tabla de evaluación de incapacidades, facultad estrictamente técnica y acotada. Dicha delegación no incluyó facultades para excluir patologías reconocidas por la ciencia médica, suprimir la consideración del dolor, imponer la fórmula de capacidad restante para incapacidades del mismo origen, ni reducir porcentajes sin justificación médica. El Poder Ejecutivo ha excedido las facultades reglamentarias del art. 99 inc. 2 de la Constitución Nacional e incurrido en delegación legislativa prohibida por el art. 76.
+
+d) Aplicación retroactiva y afectación de derechos adquiridos. El actor sufrió su siniestro laboral el 08/11/2023, bajo la vigencia del Decreto 659/96. Aplicar el Decreto 549/2025 -dictado casi dos años después- constituye una violación flagrante del principio de irretroactividad de las normas perjudiciales (art. 7 del CCyCN y art. 17 de la CN). El trabajador tiene derecho adquirido a ser evaluado conforme al régimen vigente al momento del hecho dañoso, derecho incorporado a su patrimonio desde el momento mismo del siniestro.
+
+e) Violación del principio protectorio y la garantía de reparación integral. El art. 14 bis de la CN consagra el principio protectorio como base del derecho laboral. La CSJN, desde "Aquino" en adelante, ha establecido que este principio impide normas regresivas que desmejoren la situación del trabajador. En "Ascua" señaló que el objetivo reparador no se cumple si las indemnizaciones no guardan relación con el daño real. El nuevo baremo viola frontalmente estos principios al establecer un sistema que sistemáticamente subvalora el daño real sufrido por los trabajadores.
+
+En virtud de lo expuesto, el Decreto 549/2025 resulta violatorio de los arts. 14 bis, 16, 17, 18, 28, 75 inc. 22, 76 y 99 incs. 2 y 3 de la Constitución Nacional; del art. 2.1 del Pacto Internacional de Derechos Económicos, Sociales y Culturales; del art. 26 de la Convención Americana sobre Derechos Humanos; y del art. 1 del Protocolo de San Salvador. Se deja planteada la reserva del caso federal (art. 14, Ley 48).
+
+OBSERVACIÓN Nº 3: Adicione el factor de ponderación según la edad de forma directa o aritmética.
+
+Observo el informe en traslado en la medida en que la perito adicionó el factor de ponderación según la edad calculándolo como un porcentaje sobre la incapacidad (4% de 39,77% = 1,59%), y no de forma aritmética (sumando directamente el porcentaje correspondiente a la edad), tal como surge del Decreto 659/96 -y del Decreto 549/2025 para el caso de que V.E. considere aplicable este último- y la jurisprudencia que a continuación se cita.
+
+De acuerdo al Baremo previsto en el Decreto N° 659/1996 -como así también en el Decreto N° 549/2025-, el factor de ponderación según la edad se adiciona de un modo distinto a los restantes factores, pues no es necesario calcularlo sobre la incapacidad psicofísica previamente determinada (que es la variable), motivo por el cual el rechazo de la impugnación de esta parte sólo puede fundarse en un error que V.E. debe revocar.
+
+"FACTORES DE PONDERACIÓN... la edad es un factor perfectamente determinable y no necesita la generación de ninguna variable adicional a los fines de incorporarlo como factor de ponderación. No sucede lo mismo en el caso de tipo de actividad y las posibilidades de reubicación laboral, es por ello que se torna necesaria la generación de variables determinables que nos permitan aproximar el estado de estos factores de ponderación".
+
+Idéntico criterio surge de la jurisprudencia de la Cámara de Apelaciones del fuero laboral:
+
+"En efecto, sabido es que, a diferencia de los restantes factores de ponderación, el factor edad se suma de manera directa a la incapacidad que padece el actor. Al respecto estimo oportuno señalar que el Anexo I del decreto 659/96 establece que '...los porcentajes que surgieran de la aplicación de la tabla de evaluación de incapacidades laborales podrán ser incrementados en el porcentaje (1) que surja de la aplicación de los factores de ponderación...' El '(1)' remite a una nota aclaratoria que indica que se debe multiplicar por (1 x%) el porcentaje de dicha tabla. Entonces el factor tipo de actividad y las posibilidades de reubicación laboral deben aplicarse como porcentuales extraídos del porcentaje primígenio determinado en el baremo y luego del porcentual factor edad dice que se debe 'sumar a los porcentajes que resulten del paso 1 y 2', por ello se entiende que se debe sumar directamente".
+
+"Cabe aclarar que el factor 'edad' debe sumarse de forma directa a aquel porcentual (concordantemente con lo resuelto por esta Sala in re 'Confente Sebastián Hugo c/ Provincia ART S.A. s/accidente - ley especial', expte. Nº 48.341/2013, S.D. Nº 109.278, de fecha 25/08/2016, entre otros)".
+
+"Respecto al factor de ponderación correspondiente a la edad, comparto la doctrina que sostiene que este factor se incorpora a la incapacidad funcional sumándose en forma directa... (ver en este sentido 'Riesgos de Trabajo'. J.C.F.M.. A.C.. Editorial La ley 2015)".
+
+"Luego, se agravia por el factor de ponderación correspondiente a la edad (1%) y señala que debe adicionarse aritméticamente. Sostiene que hubo un error para su cálculo. Adelanto, que le asiste razón en este punto materia de agravio. En efecto, tal como señala el apelante la incapacidad total que padece el actor, adicionándole aritméticamente el factor de ponderación correspondiente a la edad (1%), es de 7.60%".
+
+"La parte actora... objeta puntualmente que el experto no haya sumado el factor edad del 3%... A la luz del criterio mayoritario de esta Sala con respecto a los lineamientos que sobre la cuestión establece el Decreto Nº 659/96, adelanto que asiste razón al apelante en cuanto sugiere que el factor de ponderación 'edad' debe sumarse directamente a la incapacidad determinada por el perito médico".
+
+Por lo expuesto, solicito a la experta que rectifique el modo de adición del factor de ponderación según la edad, y disponga su incorporación de forma aritmética (suma directa). A todo evento, se le hace saber a la perito que, aun cuando en lo personal no esté de acuerdo con el método de adición descripto, igualmente realice el cálculo a fin de que, al momento de dictar sentencia, sea el juez de la causa quien decida cuál es el modo correcto de incorporar el factor de ponderación por la edad.
+
+III. SE CORRA TRASLADO
+
+Solicito se corra traslado del presente a la perito médico.
+
+IV. PETITORIO
+
+Por todo lo expuesto, solicito a V.E.:
+1) Se tenga por contestado en tiempo y forma el traslado de la pericia médica.
+2) Se corra traslado a la perito de las observaciones formuladas.
+3) Se haga lugar a las observaciones y se ordene a la experta que practique el cálculo de incapacidad aplicando el baremo del Decreto 659/96, con suma aritmética de las incapacidades parciales y adición directa del factor edad.
+4) Se tenga presente el planteo de inconstitucionalidad del Decreto 549/2025 y la reserva del caso federal (art. 14, Ley 48).
+
+Proveer de conformidad,
+SERÁ JUSTICIA
 ```
 
 ---

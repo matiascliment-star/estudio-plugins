@@ -64,7 +64,10 @@ Usar `pjn_leer_documentos` con `max_documentos: 10` y `max_movimientos: 50` para
 Si `pjn_leer_documentos` no trae ambos documentos (puede pasar si son antiguos o estan en movimientos mas alla del rango), intentar con `max_movimientos: 100`.
 
 **Para MEV/SCBA:**
-No hay tool de lectura de documentos para MEV. Pedirle al usuario que pegue el texto de la demanda y de la pericia medica.
+1. Usar `mev_listar_causas` para encontrar la causa y obtener `idc` e `ido`
+2. Usar `mev_leer_documentos` con `idc`, `ido` y `max_documentos: 10` para leer los documentos
+3. Identificar la demanda y la pericia medica entre los documentos leidos
+4. Si `mev_leer_documentos` no trae ambos documentos (puede pasar si son imagenes escaneadas), pedirle al usuario que pegue el texto manualmente
 
 ### FASE 3: Recopilar info complementaria
 
@@ -111,6 +114,8 @@ Aplicar TODOS los controles cruzando datos de la demanda contra la pericia. Leer
 
 **SECCION 5 — Baremo:**
 - 5.1 Debe ser Decreto 659/96. Si uso otro (AMA, Altube) → IMPUGNAR
+- 5.2 **CRITICO: Decreto 549/2025 aplicado retroactivamente** — Si el accidente es anterior a la vigencia del 549/2025 y el perito lo uso → ERROR GRAVE. Buscar en la pericia: "549/2025", "549/25", "nueva tabla", "tabla vigente que sustituye al 659/96". Consecuencias: (a) porcentajes reducidos, (b) capacidad restante generalizada indebida sobre incapacidades del mismo siniestro, (c) posible caida debajo de umbrales legales (50% o 66% T.O.)
+- 5.3 Si se detecto 5.2 → Recalcular con 659/96 + suma aritmetica y verificar si supera umbral del 50% o 66% T.O.
 
 **SECCION 6 — Factores de ponderacion:**
 - 6.1 Si aplico factores
@@ -119,7 +124,7 @@ Aplicar TODOS los controles cruzando datos de la demanda contra la pericia. Leer
 - 6.4 **Factores sobre psiquica**: dificultad y recalificacion TAMBIEN aplican sobre lo psiquico
 
 **SECCION 7 — Calculo:**
-- 7.1 Metodo de capacidad restante (Balthazar): SOLO si hay incapacidad previa
+- 7.1 Metodo de capacidad restante (Balthazar): bajo 659/96 SOLO si hay incapacidad previa de siniestro anterior. Si el perito la aplico a incapacidades del MISMO siniestro porque uso 549/2025 → ERROR (vincular con 5.2)
 - 7.2 Suma aritmetica correcta
 
 **SECCION 8 — Incapacidad integral:**
@@ -130,6 +135,7 @@ Aplicar TODOS los controles cruzando datos de la demanda contra la pericia. Leer
 - Lateralidad: SIEMPRE verificar que DERECHA/IZQUIERDA coincida entre demanda y pericia
 - Factores de ponderacion son el ERROR MAS COMUN de los peritos
 - Signos objetivos de rodilla (hidrartrosis, atrofia, bloqueo) = objetivo = da incapacidad
+- **Decreto 549/2025**: Desde su sancion, es cada vez mas frecuente que peritos apliquen este baremo retroactivamente. SIEMPRE verificar la fecha del accidente vs el baremo usado. Si aplico 549/2025 a accidente anterior → genera una OBSERVACION COMPUESTA (baremo + capacidad restante + recalculo + inconstitucionalidad subsidiaria). Usar modelo Barrientos en `modelos-impugnacion.md` como referencia
 
 ### FASE 5: Presentar resultado del control
 
@@ -161,7 +167,7 @@ Leer `references/plantilla-impugnacion.md` para el formato y `references/argumen
 
 El escrito debe:
 1. Tener encabezado con datos del expediente
-2. Titulo "IMPUGNA PERICIA MEDICA"
+2. Titulo "IMPUGNA PERICIA MEDICA" (o "OBSERVA PERICIA MEDICA" segun el caso)
 3. Objeto: "Que vengo a impugnar la pericia medica presentada por el Dr. [nombre] de fecha [fecha]..."
 4. Desarrollo: observaciones NUMERADAS, cada una con:
    - El error detectado
@@ -169,9 +175,21 @@ El escrito debe:
    - Lo que se solicita
 5. Petitorio pidiendo:
    - Que se haga lugar a la impugnacion
-   - Que el perito brinde explicaciones (art. 473 CPCCN)
+   - Que el perito brinde explicaciones (art. 473 CPCCN / 474 CPCCBA)
    - Que se ordenen estudios complementarios si corresponde
    - Subsidiariamente, designacion de nuevo perito
+
+**CASO ESPECIAL — Decreto 549/2025 aplicado retroactivamente:**
+Cuando el error principal es la aplicacion retroactiva del 549/2025, el escrito tiene una estructura especial:
+- **Observacion 1**: COMPUESTA con 3 sub-puntos:
+  - 1.1 Baremo aplicable: Decreto 659/96 (irretroactividad, art. 7 CCyCN)
+  - 1.2 Consecuencia: improcedencia de capacidad restante (659/96 solo para siniestros previos, no del mismo hecho)
+  - 1.3 Recalculo: suma aritmetica con 659/96, verificar umbrales (50%, 66%)
+- **Observacion 2**: INCONSTITUCIONALIDAD SUBSIDIARIA del 549/2025 (5 fundamentos: progresividad, porcentajes reducidos, exceso reglamentario, retroactividad, principio protectorio) + reserva caso federal
+- **Demas observaciones**: otros errores detectados (factor edad, etc.)
+- **Petitorio especifico**: incluir punto de inconstitucionalidad y reserva caso federal
+
+Ver `references/plantilla-impugnacion.md` seccion "Decreto 549/2025" y modelo Barrientos en `references/modelos-impugnacion.md` como referencia de estilo y estructura.
 
 **Formato segun jurisdiccion:**
 - PJN: generar PDF (texto plano formateado)
@@ -220,5 +238,7 @@ Alternativa mas simple: pedirle al usuario que copie el texto y lo pegue en un W
 - La lateralidad (DERECHA/IZQUIERDA) es un error grave pero poco comun
 - Si la pericia da alta incapacidad y buena causalidad, NO impugnar aunque tenga errores menores
 - Los factores de ponderacion (dificultad, recalificacion) aplican a AMBAS incapacidades (fisica Y psiquica)
-- El metodo de Balthazar (capacidad restante) SOLO se aplica cuando hay incapacidad previa
+- El metodo de Balthazar (capacidad restante) bajo Decreto 659/96 SOLO se aplica cuando hay incapacidad previa de siniestro anterior
 - Siempre consultar el baremo 659/96 para verificar porcentajes de limitacion funcional
+- **Decreto 549/2025**: Desde su sancion, es CADA VEZ MAS FRECUENTE que los peritos lo apliquen retroactivamente a siniestros anteriores. Este error tiene doble impacto: (1) porcentajes reducidos, (2) capacidad restante generalizada que no corresponde bajo 659/96. SIEMPRE plantear la inconstitucionalidad como SUBSIDIARIA (para el caso de que el juez considere aplicable el 549/2025). SIEMPRE pedir al perito que haga el calculo alternativo con 659/96 + suma aritmetica para que el juez tenga ambas opciones al sentenciar
+- Cuando el 549/2025 se aplica retroactivamente, verificar si el recalculo con 659/96 hace superar umbrales legales (50% T.O. = prestacion mensual complementaria, 66% T.O. = gran invalidez). Enfatizar esto en la observacion

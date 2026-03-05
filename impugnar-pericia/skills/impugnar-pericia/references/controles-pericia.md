@@ -288,6 +288,48 @@ Si el perito NEGO causalidad para alguna patologia:
 | OK | Uso Decreto 659/96 |
 | OK | No menciono cual uso (se presume 659/96) |
 | ERROR | Uso otro baremo (AMA, Altube, Rubinstein, etc.) |
+| ERROR | Uso Decreto 549/2025 cuando el accidente es anterior a su entrada en vigencia |
+
+### 5.2 Decreto 549/2025 aplicado retroactivamente
+
+**CRITICO** — Este control se activa cuando el perito utilizo el Decreto 549/2025 en un caso donde el accidente ocurrio antes de su entrada en vigencia. Es uno de los errores mas impactantes porque afecta TODA la determinacion de incapacidad.
+
+**Como detectar:**
+1. Buscar en la pericia menciones a "Decreto 549/2025", "Decreto 549", "549/25", "nueva tabla", "tabla vigente"
+2. Verificar la fecha del accidente/primera manifestacion invalidante
+3. Si el accidente es anterior a la entrada en vigencia del Decreto 549/2025 → ERROR
+
+| Resultado | Condicion |
+|-----------|-----------|
+| OK | El accidente es posterior al 549/2025, o el perito uso 659/96 |
+| ERROR | El accidente es ANTERIOR al 549/2025 y el perito aplico este baremo |
+
+**Consecuencias del error:**
+- Los porcentajes del 549/2025 son sustancialmente inferiores al 659/96 para las mismas limitaciones
+- El 549/2025 impone la formula de capacidad restante (Balthazar) de manera GENERALIZADA a todas las incapacidades parciales, incluso las del mismo siniestro
+- El 659/96 SOLO aplica Balthazar para incapacidades de siniestros DIFERENTES y PREVIOS
+- La combinacion de ambos efectos puede reducir drasticamente la incapacidad total
+- Puede hacer caer al actor por debajo de umbrales legales criticos (50% T.O., 66% T.O.)
+
+**REGLA**: El baremo aplicable es el vigente al momento de la PRIMERA MANIFESTACION INVALIDANTE (fecha del accidente o toma de conocimiento de la enfermedad profesional), NO el vigente al momento de la pericia. Principio de irretroactividad (art. 7 CCyCN).
+
+### 5.3 Impacto en umbrales legales
+
+**Solo aplica si se detecto ERROR en 5.2.**
+
+Recalcular la incapacidad total usando 659/96 con suma aritmetica y verificar si supera umbrales criticos:
+
+| Umbral | Consecuencia legal | Verificar |
+|--------|-------------------|-----------|
+| 50% T.O. | Art. 14 inc. 2 a) Ley 24.557: prestacion de pago mensual complementaria | Si la incapacidad con 659/96 supera 50% pero con 549/2025 queda debajo |
+| 66% T.O. | Gran invalidez, prestacion especial | Si la incapacidad con 659/96 supera 66% pero con 549/2025 queda debajo |
+
+| Resultado | Condicion |
+|-----------|-----------|
+| OK | No hay cambio de umbral |
+| ERROR GRAVE | La correccion del baremo hace superar un umbral legal critico |
+
+**Si se detecta cambio de umbral**: Enfatizar en la observacion que la aplicacion erronea del 549/2025 no solo perjudica cuantitativamente sino que tiene consecuencias CUALITATIVAS determinantes.
 
 ---
 
@@ -350,17 +392,26 @@ Si el perito NEGO causalidad para alguna patologia:
 
 ### 7.1 Metodo de capacidad restante (Balthazar)
 
-**Solo se aplica si:**
+**Bajo el Decreto 659/96, solo se aplica si:**
 - Hubo siniestro anterior con incapacidad mensurada
 - Examen preocupacional constato lesiones
 - Es "gran siniestrado" (>66%)
 
+**ATENCION: Decreto 549/2025 vs 659/96**
+El Decreto 549/2025 impone la formula de capacidad restante de manera GENERALIZADA a TODAS las incapacidades parciales, incluso las derivadas del MISMO siniestro. El Decreto 659/96 la reserva EXCLUSIVAMENTE para combinar incapacidades de siniestros DIFERENTES y PREVIOS. Si el perito aplico capacidad restante porque uso el 549/2025, este error es CONSECUENCIA del error de baremo (control 5.2) y debe impugnarse conjuntamente.
+
 | Resultado | Condicion |
 |-----------|-----------|
-| OK | Lo aplico correctamente (habia incapacidad previa) |
+| OK | Lo aplico correctamente (habia incapacidad previa documentada) |
 | OK | No lo aplico (no habia incapacidad previa) |
 | ERROR | Lo aplico SIN que haya incapacidad previa → baja el total injustamente |
+| ERROR | Lo aplico a incapacidades del MISMO siniestro porque uso metodologia del 549/2025 |
 | ERROR | No lo aplico cuando si habia incapacidad previa |
+
+**Como cuantificar el perjuicio:** Comparar suma aritmetica vs capacidad restante. Ejemplo tipico:
+- Incapacidades parciales: 12% + 9% + 6% = 27% (suma aritmetica bajo 659/96)
+- Con capacidad restante: 12% + 7.92% + 3.84% = 23.76% (reduccion de 3+ puntos)
+- La diferencia se amplifica cuantas mas incapacidades parciales haya
 
 ### 7.2 Suma aritmetica
 
