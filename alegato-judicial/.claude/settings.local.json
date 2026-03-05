@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__judicial__mev_listar_causas",
+      "mcp__judicial__mev_obtener_movimientos",
+      "mcp__judicial__mev_leer_documentos",
+      "mcp__judicial__mev_scrape_masivo",
+      "mcp__judicial__pjn_listar_expedientes",
+      "mcp__judicial__pjn_buscar_expediente",
+      "mcp__judicial__pjn_obtener_movimientos",
+      "mcp__judicial__pjn_leer_documentos",
+      "mcp__judicial__pjn_leer_documentos_lote",
+      "mcp__judicial__pjn_consulta_publica",
+      "mcp__judicial__pjn_jurisdicciones",
+      "mcp__judicial__pjn_info_escrito",
+      "mcp__judicial__pjn_obtener_cedulas",
+      "mcp__judicial__pjn_guardar_borrador",
+      "mcp__judicial__pjn_enviar_borrador",
+      "mcp__judicial__scba_guardar_borrador",
+      "mcp__judicial__scba_guardar_borrador_adjuntos",
+      "mcp__judicial__scba_info_causa",
+      "mcp__judicial__scba_listar_presentaciones",
+      "mcp__judicial__scba_obtener_cedulas",
+      "mcp__judicial__csjn_buscar_sentencias",
+      "mcp__judicial__csjn_buscar_por_palabra_clave",
+      "mcp__judicial__csjn_descargar_fallo",
+      "mcp__judicial__csjn_analizar_pdfs",
+      "mcp__judicial__csjn_listar_jurisdicciones",
+      "mcp__judicial__csjn_listar_tribunales",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(pip install:*)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "judicial"
+  ],
+  "enableAllProjectMcpServers": true
+}
