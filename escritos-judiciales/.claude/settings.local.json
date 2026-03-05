@@ -8,12 +8,16 @@
       "mcp__judicial__mev_listar_causas",
       "mcp__judicial__mev_obtener_movimientos",
       "mcp__judicial__pjn_guardar_borrador",
+      "mcp__judicial__pjn_enviar_borrador",
       "mcp__judicial__pjn_buscar_expediente",
       "mcp__judicial__pjn_info_escrito",
       "mcp__judicial__pjn_listar_expedientes",
       "mcp__judicial__pjn_obtener_movimientos",
       "Bash(python3:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }
