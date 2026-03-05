@@ -2,7 +2,7 @@
 name: subir-escrito-pjn
 description: >
   Subir escritos y borradores al PJN (Poder Judicial de la Nación) via escritos.pjn.gov.ar.
-  Convierte el escrito a PDF y lo guarda como borrador usando la tool MCP pjn_guardar_borrador.
+  Convierte el escrito a PDF y lo guarda como borrador usando el script de upload.
   Usa este skill siempre que el usuario pida: "subir escrito PJN", "guardar borrador PJN",
   "presentar escrito PJN", "borrador PJN", "escrito PJN", "subir borrador nación",
   "cargar escrito en PJN", "presentar en nación", "subir PDF al PJN",
@@ -22,9 +22,9 @@ Este skill se encarga de convertir un escrito a PDF y subirlo como borrador al s
 ## Flujo completo
 
 1. **Obtener el texto del escrito** (el usuario lo dicta, lo pega, o lo tenés de un paso previo)
-2. **Convertir a PDF** usando Python + reportlab (o weasyprint si hay HTML complejo)
-3. **Codificar el PDF en base64**
-4. **Llamar a la tool MCP `pjn_guardar_borrador`** con los parámetros correctos
+2. **Convertir a PDF** usando Python + reportlab
+3. **Guardar el PDF en un archivo temporal** (ej: `/tmp/escrito_pjn.pdf`)
+4. **Ejecutar el script `upload_pjn_borrador.py`** que se encarga de codificar en base64 y llamar al MCP server
 5. **Confirmar al usuario** que el borrador quedó guardado
 
 ## Credenciales
@@ -124,25 +124,48 @@ def html_a_pdf(html_content, output_path):
 
 ### Si el usuario ya tiene un PDF
 
-Si el usuario pasa un archivo PDF directamente, no hace falta convertir nada. Solo leer el archivo y codificarlo en base64.
+Si el usuario pasa un archivo PDF directamente, no hace falta convertir nada. Usar el path del PDF directamente con el script de upload.
 
-## Llamada a la tool MCP
+## Subida del borrador con el script helper
 
-Una vez que tenés el PDF en base64, llamar a `pjn_guardar_borrador`:
+**IMPORTANTE**: NO intentar pasar el contenido base64 del PDF como parámetro de una tool MCP. Los PDFs son demasiado grandes para pasar como string en el contexto. En su lugar, usar el script helper que maneja todo internamente.
 
+Una vez que tenés el PDF guardado en un archivo (ej: `/tmp/escrito_pjn.pdf`), ejecutar:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/upload_pjn_borrador.py \
+  --usuario "20313806198" \
+  --password "CONTRASEÑA" \
+  --id-expediente 123456 \
+  --tipo "E" \
+  --pdf-path "/tmp/escrito_pjn.pdf" \
+  --pdf-nombre "escrito.pdf" \
+  --descripcion "IMPUGNA PERICIA"
 ```
-Tool: pjn_guardar_borrador
-Params:
-  usuario: <PJN_USUARIO del .env>
-  password: <PJN_PASSWORD del .env>
-  numero_expediente: "CNT 6379/2024"  (o el que corresponda)
-  tipo_escrito: "E"  (ver tabla de tipos abajo)
-  pdf_base64: <el PDF codificado en base64>
-  pdf_nombre: "escrito.pdf"  (nombre descriptivo)
-  descripcion_adjunto: "IMPUGNA PERICIA"  (descripción del escrito)
-```
 
-La tool resuelve automáticamente el ID interno del expediente a partir del número.
+El script:
+1. Lee el PDF del disco
+2. Lo codifica en base64 internamente
+3. Se conecta al MCP server por HTTP
+4. Llama a `pjn_guardar_borrador`
+5. Imprime el resultado en stdout
+
+### Parámetros del script
+
+| Parámetro | Requerido | Descripción |
+|-----------|-----------|-------------|
+| `--usuario` | Sí | CUIT del usuario PJN |
+| `--password` | Sí | Password del PJN |
+| `--id-expediente` | Sí | ID interno del expediente (número entero) |
+| `--tipo` | Sí | Código tipo de escrito: M, E, C, I, H |
+| `--pdf-path` | Sí | Path al archivo PDF en disco |
+| `--pdf-nombre` | Sí | Nombre descriptivo del PDF |
+| `--descripcion` | Sí | Descripción del escrito |
+| `--id-oficina-destino` | No | ID oficina destino (opcional) |
+
+### Obtener el ID del expediente
+
+El script necesita el ID interno del expediente (no el número de causa). Para obtenerlo, usar la tool MCP `pjn_buscar_expediente` con el número de expediente (ej: "CNT 6379/2024"). La tool devuelve el `id` interno que se usa como `--id-expediente`.
 
 ## Tipos de escrito
 
@@ -166,20 +189,25 @@ Ejemplos:
 - `COM 12345/2024` (comercial)
 - `CAF 8765/2023` (contencioso administrativo federal)
 
-## IMPORTANTE: Uso obligatorio de tools MCP
+## IMPORTANTE: Método de upload
 
-**NUNCA** intentar llamar a las APIs del PJN directamente via Node.js, curl, fetch, axios, o cualquier otro método HTTP directo. **SIEMPRE** usar las tools MCP provistas (`pjn_guardar_borrador`, `pjn_enviar_borrador`). Estas tools MCP ya están disponibles en tu entorno como herramientas que podés invocar directamente — no necesitás importar módulos, instalar paquetes, ni escribir código para hacer las llamadas HTTP. Simplemente invocá la tool MCP con los parámetros indicados.
+**NUNCA** intentar:
+- Pasar el base64 del PDF como parámetro de la tool MCP `pjn_guardar_borrador` directamente (es demasiado grande para el contexto del agente)
+- Llamar a las APIs del PJN directamente via curl, fetch, axios u otro método HTTP
+- Leer el base64 del PDF con el Read tool (trunca líneas largas)
 
-Si al intentar usar la tool MCP recibís un error de que no existe o no está disponible, **informar al usuario** que el servidor MCP del scraper judicial no está conectado y que debe verificar su configuración. **No** intentar workarounds con Node.js o cualquier otro método.
+**SIEMPRE** usar el script `upload_pjn_borrador.py` que maneja todo internamente. El script lee el PDF del disco, lo codifica, y llama al MCP server — el base64 nunca pasa por el contexto del agente.
+
+Si el script no está disponible o falla con error de conexión, informar al usuario que el servidor MCP no está conectado y que debe verificar su configuración.
 
 ## Instrucciones para el agente
 
 1. Leer `.env` para obtener `PJN_USUARIO` y `PJN_PASSWORD`
 2. Confirmar con el usuario: número de expediente, tipo de escrito, y contenido
-3. Generar el PDF (instalar `pip install reportlab --break-system-packages` si hace falta)
-4. Codificar en base64
-5. Llamar a la **tool MCP** `pjn_guardar_borrador` (NO via Node.js, NO via curl — usar la tool MCP directamente)
-6. Informar al usuario el resultado (éxito + ID del borrador)
+3. Obtener el ID interno del expediente usando la tool MCP `pjn_buscar_expediente` (si solo tenés el número de causa)
+4. Generar el PDF con Python + reportlab (instalar con `pip install reportlab --break-system-packages` si hace falta). Guardar en `/tmp/escrito_pjn.pdf`
+5. Ejecutar el script `${CLAUDE_PLUGIN_ROOT}/scripts/upload_pjn_borrador.py` con los parámetros correctos
+6. Informar al usuario el resultado (éxito + datos del borrador)
 7. Recordar al usuario que debe firmar digitalmente el borrador desde escritos.pjn.gov.ar
 
 Si el usuario también quiere enviar el borrador al tribunal (acción IRREVERSIBLE), usar la **tool MCP** `pjn_enviar_borrador` con el `id_escrito` devuelto. Confirmar SIEMPRE antes de enviar porque no se puede deshacer.

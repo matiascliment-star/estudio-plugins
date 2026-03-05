@@ -1,15 +1,15 @@
 ---
 name: scrape-pjn
 description: >
-  PJN (Poder Judicial de la Nacion) - scraping, consultas, escritos y borradores.
+  PJN (Poder Judicial de la Nacion) - scraping y consultas de expedientes.
   Usa este skill siempre que el usuario pida: scrapear, consultar, extraer o buscar
   expedientes o movimientos del PJN, SCW, Poder Judicial de la Nacion, o causas
-  de CABA/justicia nacional. Tambien para subir escritos, presentar escritos,
-  guardar borradores, presentaciones electronicas en PJN, escritos.pjn.gov.ar,
-  o cualquier operacion sobre expedientes nacionales.
+  de CABA/justicia nacional. Tambien para consultar info de expedientes,
+  leer documentos, ver cedulas, o cualquier consulta sobre expedientes nacionales.
+  Para SUBIR escritos o guardar borradores en PJN, usar el skill "subir-escrito-pjn"
+  del plugin escritos-judiciales.
   Triggers: "scrapear PJN", "movimientos PJN", "expedientes judiciales de nacion",
-  "subir escrito", "subir borrador", "guardar borrador", "presentar escrito",
-  "escrito PJN", "borrador PJN", "CNT", "CIV", "COM", "CAF", "escritos.pjn".
+  "consultar PJN", "buscar expediente", "CNT", "CIV", "COM", "CAF", "cedulas PJN".
 ---
 
 # Skill: Scraper PJN (Poder Judicial de la Nacion - SCW)
@@ -47,9 +47,23 @@ Las credenciales se pasan como parametros a cada tool:
 | Tool | Descripcion | Irreversible? |
 |------|-------------|---------------|
 | `pjn_info_escrito` | Consulta info del expediente para escritos | No |
-| `pjn_guardar_borrador` | Guarda escrito como borrador | No |
 | `pjn_enviar_borrador` | Envia borrador al tribunal | **SI** |
-| `pjn_presentar_escrito` | Presenta escrito directo al tribunal | **SI** |
+
+**IMPORTANTE sobre guardar borradores:**
+Para guardar un borrador con PDF en PJN, NO usar la tool MCP `pjn_guardar_borrador` directamente (el PDF base64 es demasiado grande para pasar como parametro). En su lugar, usar el **script helper** del plugin `escritos-judiciales`:
+
+```bash
+python3 <plugin_escritos_root>/scripts/upload_pjn_borrador.py \
+  --usuario "CUIT" --password "PASS" \
+  --id-expediente 123456 --tipo "E" \
+  --pdf-path "/tmp/escrito.pdf" \
+  --pdf-nombre "escrito.pdf" \
+  --descripcion "IMPUGNA PERICIA"
+```
+
+El script lee el PDF del disco, lo codifica en base64 internamente, y llama al MCP server por HTTP. El base64 nunca pasa por el contexto del agente.
+
+Para **enviar** un borrador ya guardado al tribunal (IRREVERSIBLE), usar la tool MCP `pjn_enviar_borrador` con el `id_escrito` devuelto. Confirmar SIEMPRE con el usuario.
 
 ## Estructura de datos
 
@@ -102,13 +116,6 @@ Las credenciales se pasan como parametros a cada tool:
 | I | ESCRITO DEMANDA / DOCUMENTAL DE INICIO |
 | H | SOLICITUD HABILITACION DIA |
 
-## Flujo para guardar borrador con PDF
-
-1. Usar `pjn_guardar_borrador` con `numero_expediente` directo (ej: `"CNT 6379/2024"`)
-2. El PDF se pasa como `pdf_base64`
-3. El ID interno se resuelve automaticamente
-4. Para enviar al tribunal: usar `pjn_enviar_borrador` con el `id_escrito` devuelto (**IRREVERSIBLE**)
-
 ## Consulta publica
 
 La tool `pjn_consulta_publica` busca cualquier expediente (no solo los del usuario). Requiere login para evitar captcha.
@@ -131,5 +138,6 @@ La consulta publica por parte SOLO permite buscar por DEMANDADO. Requiere Claude
 4. Para buscar uno especifico: `pjn_buscar_expediente` con `numero_expediente`
 5. Para ver movimientos: `pjn_obtener_movimientos` con `numero_expediente`
 6. Para buscar expedientes ajenos: `pjn_consulta_publica` con jurisdiccion + numero + anio
-7. Para escritos: `pjn_guardar_borrador` -> `pjn_enviar_borrador` (confirmar con usuario antes de enviar)
-8. Si una busqueda por parte es necesaria, usar Chrome (no hay tool MCP para esto)
+7. Para guardar borradores con PDF: usar el script `upload_pjn_borrador.py` del plugin `escritos-judiciales` (NO pasar pdf_base64 como parametro de tool MCP)
+8. Para enviar borrador al tribunal: `pjn_enviar_borrador` (confirmar con usuario, es IRREVERSIBLE)
+9. Si una busqueda por parte es necesaria, usar Chrome (no hay tool MCP para esto)
