@@ -46,8 +46,7 @@ Si no queda claro, preguntar.
 
 ### FASE 2: Leer documentos del expediente
 
-**Para PJN:**
-Usar `pjn_leer_documentos` con `max_documentos: 10` y `max_movimientos: 50` para obtener los documentos del expediente. Necesitas leer DOS documentos criticos:
+Necesitas leer TRES fuentes de informacion:
 
 1. **La DEMANDA** — Fuente de:
    - Lesiones reclamadas
@@ -58,26 +57,48 @@ Usar `pjn_leer_documentos` con `max_documentos: 10` y `max_movimientos: 50` para
    - Porcentaje de incapacidad reclamado
    - Si reclama incapacidad psiquica
    - Si reclama hernias, cicatrices, lesion de nervios
+   - **Numero de expediente SRT** (buscar "Expediente SRT", "SRT N°", "Comision Medica" en el texto)
 
 2. **La PERICIA MEDICA** — El documento a controlar
 
-Si `pjn_leer_documentos` no trae ambos documentos (puede pasar si son antiguos o estan en movimientos mas alla del rango), intentar con `max_movimientos: 100`.
+3. **El DICTAMEN SRT / COMISION MEDICA** — Para comparar:
+   - Que incapacidad determino la SRT (puede ser 0%)
+   - Que patologias reconocio/rechazo
+   - Si aplico baremo y cual
+   - La fecha del dictamen
+
+**Para PJN:**
+Usar `pjn_leer_documentos` con `max_documentos: 10` y `max_movimientos: 50`. Buscar la demanda y la pericia medica en los documentos leidos.
+
+Si `pjn_leer_documentos` no trae ambos documentos, intentar con `max_movimientos: 100`.
+
+Para obtener el dictamen SRT:
+- Buscar en el texto de la demanda el numero de expediente SRT (ej: "Expediente SRT 618936/23")
+- Buscar en los movimientos del expediente si se adjunto el dictamen de Comision Medica
+- Si no aparece en los documentos, pedirle al usuario que lo pegue
 
 **Para MEV/SCBA:**
 1. Usar `mev_listar_causas` para encontrar la causa y obtener `idc` e `ido`
-2. Usar `mev_leer_documentos` con `idc`, `ido` y `max_documentos: 10` para leer los documentos
-3. Identificar la demanda y la pericia medica entre los documentos leidos
-4. Si `mev_leer_documentos` no trae ambos documentos (puede pasar si son imagenes escaneadas), pedirle al usuario que pegue el texto manualmente
+2. Usar `mev_obtener_movimientos` con `idc` e `ido` para ver TODOS los movimientos de la causa
+3. Identificar en los movimientos: demanda, pericia medica, y dictamen de Comision Medica / SRT
+4. Usar `mev_leer_documentos` con los movimientos relevantes identificados
+5. Si los documentos son imagenes escaneadas o no se pueden leer, pedirle al usuario que pegue el texto manualmente
+
+**IMPORTANTE**: El dictamen SRT es clave porque:
+- Si la SRT dio 0% y el perito da incapacidad → la pericia es favorable, tener cuidado al impugnar
+- Si la SRT dio incapacidad y el perito da menos → argumento fuerte para impugnar
+- Si es accion de revision (Ley 15057 en Provincia, Ley 27348 en Nacion), el dictamen SRT es el acto que se revisa
+- Si la SRT dio 0%, NO hay incapacidad previa → Balthazar es improcedente (argumento clave contra 549/2025)
 
 ### FASE 3: Recopilar info complementaria
 
-Solo preguntar al usuario lo que NO se pueda extraer de la demanda y la pericia:
-- Dictamen SRT (si hay, pedirle que lo pegue o indicar el numero)
+Solo preguntar al usuario lo que NO se pudo extraer de la demanda, la pericia y el dictamen SRT:
+- Si no se encontro el dictamen SRT en los movimientos, pedirle al usuario que lo pegue o indique el numero
 - Estudios medicos extra que quiera aportar (RMN, EMG, etc.)
 - Datos que el usuario quiera destacar especialmente
 - Si el actor es diestro o zurdo (relevante para miembro habil en miembros superiores)
 
-**NO preguntar** lo que ya esta en la demanda (lesiones, mecanica, lateralidad, etc.).
+**NO preguntar** lo que ya se extrajo de los documentos leidos (lesiones, mecanica, lateralidad, fecha, SRT si ya se leyo, etc.).
 
 ### FASE 4: Controlar la pericia
 
@@ -147,21 +168,46 @@ Mostrar al usuario una tabla con TODOS los items controlados:
 | 1.1 | Fecha accidente | OK | Coincide: 15/03/2022 |
 | 1.3 | Lateralidad | ERROR | Demanda: rodilla DERECHA / Pericia: rodilla IZQUIERDA |
 | 2.3 | Limitacion funcional | WARNING | Flexion 0-120° = 5% segun baremo, perito asigno 2% |
+| 5.2 | Decreto 549/2025 | ERROR | Perito uso 549/2025, accidente anterior a su vigencia |
 | 6.2 | Factor edad | ERROR | Aplico porcentual (10% de 25% = 2.5%) en vez de aritmetico (10%) |
 ...
 ```
 
 Al final, mostrar:
-- **Resumen**: incapacidad fisica X%, psiquica X%, factores X%, total X%
+- **Datos SRT**: que determino la Comision Medica (% incapacidad o rechazo, patologias)
+- **Resumen**: incapacidad fisica X%, psiquica X%, factores X%, total X% (segun perito vs segun nuestro calculo)
 - **Veredicto**: HAY QUE IMPUGNAR / NO CONVIENE IMPUGNAR
-- **Motivos de impugnacion** (solo los ERROR)
 - **Pronostico**: probabilidad de exito de la impugnacion
 
-Preguntar al usuario si quiere generar el escrito de impugnacion.
+### FASE 5bis: Preguntar al usuario QUE impugnar
+
+**CRITICO: NO generar el escrito automaticamente. Primero preguntar.**
+
+Presentar al usuario la lista de items con ERROR o WARNING y preguntarle cuales quiere incluir en la impugnacion:
+
+```
+Errores detectados — ¿cuales queres impugnar?
+
+1. [ERROR] Decreto 549/2025 aplicado retroactivamente (incluye: baremo, capacidad restante, recalculo, inconstitucionalidad subsidiaria)
+2. [ERROR] Factor edad porcentual en vez de aritmetico
+3. [WARNING] Dificultad "intermedia" pero asigno 10% (deberia ser 11-15%)
+4. [WARNING] No aplico factores sobre psiquica
+
+¿Queres agregar alguna observacion adicional que no haya detectado?
+```
+
+El usuario puede:
+- Confirmar todos los errores
+- Elegir solo algunos
+- Descartar errores que no quiere impugnar (ej: si la pericia es favorable en general)
+- Agregar observaciones propias que el control automatico no detecto
+- Decir que no quiere impugnar nada
+
+**Solo continuar a la Fase 6 cuando el usuario haya confirmado QUE observaciones incluir.**
 
 ### FASE 6: Generar escrito de impugnacion
 
-Solo si hay items ERROR y el usuario confirma.
+Solo con las observaciones que el usuario confirmo en la Fase 5bis.
 
 Leer `references/plantilla-impugnacion.md` para el formato y `references/argumentos-medico-legales.md` para los argumentos.
 
