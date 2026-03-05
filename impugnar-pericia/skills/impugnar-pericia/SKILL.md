@@ -67,22 +67,23 @@ Necesitas leer TRES fuentes de informacion:
    - Si aplico baremo y cual
    - La fecha del dictamen
 
-**Para PJN:**
+**Para PJN (CABA / Nacional):**
 Usar `pjn_leer_documentos` con `max_documentos: 10` y `max_movimientos: 50`. Buscar la demanda y la pericia medica en los documentos leidos.
 
 Si `pjn_leer_documentos` no trae ambos documentos, intentar con `max_movimientos: 100`.
 
-Para obtener el dictamen SRT:
-- Buscar en el texto de la demanda el numero de expediente SRT (ej: "Expediente SRT 618936/23")
-- Buscar en los movimientos del expediente si se adjunto el dictamen de Comision Medica
-- Si no aparece en los documentos, pedirle al usuario que lo pegue
+Para obtener el dictamen SRT / Comision Medica:
+- **El expediente de Comision Medica esta en el PRIMER DEO** (Despacho de Expedientes y Oficios). Buscar en los movimientos el primer despacho tipo "DEO" o "DOCUMENTAL DE INICIO" — ahi se adjunta el expediente administrativo de la SRT con el dictamen de Comision Medica.
+- Si no se encuentra en el DEO, buscar en el texto de la demanda el numero de expediente SRT (ej: "Expediente SRT 618936/23")
+- Si no aparece, pedirle al usuario que lo pegue en el chat
 
-**Para MEV/SCBA:**
+**Para MEV/SCBA (Provincia de Buenos Aires):**
 1. Usar `mev_listar_causas` para encontrar la causa y obtener `idc` e `ido`
 2. Usar `mev_obtener_movimientos` con `idc` e `ido` para ver TODOS los movimientos de la causa
-3. Identificar en los movimientos: demanda, pericia medica, y dictamen de Comision Medica / SRT
-4. Usar `mev_leer_documentos` con los movimientos relevantes identificados
-5. Si los documentos son imagenes escaneadas o no se pueden leer, pedirle al usuario que pegue el texto manualmente
+3. Identificar en los movimientos: demanda, pericia medica
+4. **El dictamen de Comision Medica se encuentra en una CONTESTACION DE OFICIO**. Buscar en los movimientos un tramite tipo "contestacion de oficio", "oficio contestado", "informe SRT", "oficio SRT" — generalmente el dictamen viene adjunto como PDF en ese tramite.
+5. Usar `mev_leer_documentos` con los movimientos relevantes identificados
+6. Si no se encuentra la contestacion de oficio con el dictamen, o si el PDF no se puede leer (imagen escaneada), pedirle al usuario que lo pegue en el chat
 
 **IMPORTANTE**: El dictamen SRT es clave porque:
 - Si la SRT dio 0% y el perito da incapacidad → la pericia es favorable, tener cuidado al impugnar
