@@ -2,29 +2,18 @@
 """
 Upload a borrador with PDF adjuntos to SCBA/MEV via the MCP server HTTP endpoint.
 
-This script handles the full MCP Streamable HTTP protocol:
-  1. Initialize session
-  2. Send initialized notification
-  3. Call scba_guardar_borrador_adjuntos tool with HTML + PDF base64 adjuntos
-  4. Print the result
+Auto-reads credentials from .env files (plugin dir, ~/.env, or CLI args).
 
 Usage:
+  # Minimal (credentials auto-detected):
   python3 upload_scba_adjuntos.py \
-    --usuario user@notificaciones.scba.gov.ar \
-    --password SECRET \
-    --id-org 123 \
-    --id-causa 456 \
+    --id-org 123 --id-causa 456 \
     --titulo "ACOMPAÑA DOCUMENTAL" \
-    --texto-html "<p>...</p>" \
     --texto-html-file /tmp/escrito.html \
-    --adjuntos /tmp/doc1.pdf /tmp/doc2.pdf \
-    [--tipo-presentacion 1] \
-    [--mcp-url https://web-production-78135.up.railway.app/mcp] \
-    [--api-key cpacf-mcp-railway-2024-secure-key]
+    --adjuntos /tmp/doc1.pdf /tmp/doc2.pdf
 
-For borrador WITHOUT adjuntos (text only), this script also supports:
+  # Sin adjuntos:
   python3 upload_scba_adjuntos.py \
-    --usuario ... --password ... \
     --id-org 123 --id-causa 456 \
     --titulo "PRONTO DESPACHO" \
     --texto-html "<p>...</p>" \
@@ -49,8 +38,40 @@ MCP_URL_DEFAULT = "https://web-production-78135.up.railway.app/mcp"
 API_KEY_DEFAULT = "cpacf-mcp-railway-2024-secure-key"
 
 
+def load_env_file(path):
+    """Read a .env file and return a dict of key=value pairs."""
+    env = {}
+    if not os.path.exists(path):
+        return env
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                env[key.strip()] = value.strip()
+    return env
+
+
+def find_credentials():
+    """Auto-detect MEV credentials from .env files in multiple locations."""
+    search_paths = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        os.path.expanduser("~/.env"),
+        "/Users/matiaschristiangarciacliment/.env",
+    ]
+
+    for path in search_paths:
+        env = load_env_file(path)
+        if env.get("MEV_USUARIO") and env.get("MEV_PASSWORD"):
+            print(f"Credentials loaded from: {path}", file=sys.stderr)
+            return env.get("MEV_USUARIO"), env.get("MEV_PASSWORD")
+
+    return None, None
+
+
 def mcp_request(url, api_key, body, session_id=None):
-    """Send a JSON-RPC request to the MCP server and return parsed response."""
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
@@ -85,7 +106,6 @@ def mcp_request(url, api_key, body, session_id=None):
 
 
 def initialize_session(url, api_key):
-    """Initialize MCP session and return session ID."""
     init_body = {
         "jsonrpc": "2.0",
         "method": "initialize",
@@ -115,7 +135,6 @@ def initialize_session(url, api_key):
 
 
 def call_tool(url, api_key, session_id, tool_name, arguments):
-    """Call an MCP tool and return the result."""
     body = {
         "jsonrpc": "2.0",
         "method": "tools/call",
@@ -138,9 +157,11 @@ def call_tool(url, api_key, session_id, tool_name, arguments):
 
 
 def main():
+    auto_user, auto_pass = find_credentials()
+
     parser = argparse.ArgumentParser(description="Upload borrador to SCBA/MEV via MCP")
-    parser.add_argument("--usuario", required=True, help="Email MEV")
-    parser.add_argument("--password", required=True, help="Password MEV")
+    parser.add_argument("--usuario", default=auto_user, help="Email MEV (auto-detected from .env)")
+    parser.add_argument("--password", default=auto_pass, help="Password MEV (auto-detected from .env)")
     parser.add_argument("--id-org", required=True, type=int, help="ID del organismo (ido)")
     parser.add_argument("--id-causa", required=True, type=int, help="ID de la causa (idc)")
     parser.add_argument("--titulo", required=True, help="Titulo del escrito")
@@ -152,6 +173,10 @@ def main():
     parser.add_argument("--mcp-url", default=MCP_URL_DEFAULT, help="URL del MCP server")
     parser.add_argument("--api-key", default=API_KEY_DEFAULT, help="API key del MCP server")
     args = parser.parse_args()
+
+    if not args.usuario or not args.password:
+        print("ERROR: No se encontraron credenciales MEV. Pasar --usuario y --password o crear ~/.env con MEV_USUARIO y MEV_PASSWORD", file=sys.stderr)
+        sys.exit(1)
 
     # Get HTML content
     texto_html = args.texto_html
@@ -173,7 +198,6 @@ def main():
     print(f"Session ID: {session_id}", file=sys.stderr)
 
     if args.sin_adjuntos or not args.adjuntos:
-        # Borrador sin adjuntos
         tool_name = "scba_guardar_borrador"
         tool_args = {
             "usuario": args.usuario,
@@ -185,7 +209,6 @@ def main():
             "tipo_presentacion": args.tipo_presentacion,
         }
     else:
-        # Borrador con adjuntos
         adjuntos_b64 = []
         for pdf_path in args.adjuntos:
             pdf_path = os.path.expanduser(pdf_path)
@@ -215,11 +238,9 @@ def main():
             "tipo_presentacion": args.tipo_presentacion,
         }
 
-    # Call the MCP tool
     print(f"Calling {tool_name}...", file=sys.stderr)
     result = call_tool(args.mcp_url, args.api_key, session_id, tool_name, tool_args)
 
-    # Output result
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 

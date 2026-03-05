@@ -2,26 +2,23 @@
 """
 Upload a PDF as a draft (borrador) to PJN via the MCP server HTTP endpoint.
 
-This script handles the full MCP Streamable HTTP protocol:
-  1. Initialize session
-  2. Send initialized notification
-  3. Call pjn_guardar_borrador tool with the PDF base64
-  4. Print the result
+Auto-reads credentials from .env files (plugin dir, ~/.env, or CLI args).
 
 Usage:
+  # Minimal (credentials auto-detected from .env):
   python3 upload_pjn_borrador.py \
-    --usuario 20313806198 \
-    --password SECRET \
     --numero-expediente "CNT 40454/2024" \
     --tipo E \
     --pdf-path /tmp/escrito.pdf \
     --pdf-nombre escrito.pdf \
-    --descripcion "IMPUGNA PERICIA" \
-    [--mcp-url https://web-production-78135.up.railway.app/mcp] \
-    [--api-key cpacf-mcp-railway-2024-secure-key] \
-    [--id-oficina-destino 789]
+    --descripcion "IMPUGNA PERICIA"
 
-Also accepts --id-expediente (numeric) as alternative to --numero-expediente.
+  # Explicit credentials:
+  python3 upload_pjn_borrador.py \
+    --usuario 20313806198 \
+    --password SECRET \
+    --numero-expediente "CNT 40454/2024" \
+    ...
 """
 
 import argparse
@@ -42,6 +39,43 @@ MCP_URL_DEFAULT = "https://web-production-78135.up.railway.app/mcp"
 API_KEY_DEFAULT = "cpacf-mcp-railway-2024-secure-key"
 
 
+def load_env_file(path):
+    """Read a .env file and return a dict of key=value pairs."""
+    env = {}
+    if not os.path.exists(path):
+        return env
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                env[key.strip()] = value.strip()
+    return env
+
+
+def find_credentials():
+    """Auto-detect PJN credentials from .env files in multiple locations."""
+    # Locations to search (in order of priority)
+    search_paths = [
+        # Plugin directory .env
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        # Home directory .env
+        os.path.expanduser("~/.env"),
+        # Real macOS home (in case ~ is sandboxed)
+        "/Users/matiaschristiangarciacliment/.env",
+    ]
+
+    for path in search_paths:
+        env = load_env_file(path)
+        if env.get("PJN_USUARIO") and env.get("PJN_PASSWORD"):
+            print(f"Credentials loaded from: {path}", file=sys.stderr)
+            return env.get("PJN_USUARIO"), env.get("PJN_PASSWORD")
+
+    return None, None
+
+
 def mcp_request(url, api_key, body, session_id=None):
     """Send a JSON-RPC request to the MCP server and return parsed response."""
     headers = {
@@ -58,7 +92,6 @@ def mcp_request(url, api_key, body, session_id=None):
     new_session_id = resp.headers.get("Mcp-Session-Id") or session_id
 
     if "text/event-stream" in content_type:
-        # Parse SSE response - extract JSON-RPC messages from events
         result = None
         for line in resp.text.split("\n"):
             if line.startswith("data: "):
@@ -70,7 +103,6 @@ def mcp_request(url, api_key, body, session_id=None):
                         pass
         return result, new_session_id
     else:
-        # Direct JSON response
         if resp.status_code == 202:
             return None, new_session_id
         try:
@@ -133,11 +165,13 @@ def call_tool(url, api_key, session_id, tool_name, arguments):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Upload PDF as borrador to PJN via MCP")
-    parser.add_argument("--usuario", required=True, help="CUIT del usuario PJN")
-    parser.add_argument("--password", required=True, help="Password del usuario PJN")
+    # Auto-detect credentials
+    auto_user, auto_pass = find_credentials()
 
-    # Expediente: acepta numero O id interno
+    parser = argparse.ArgumentParser(description="Upload PDF as borrador to PJN via MCP")
+    parser.add_argument("--usuario", default=auto_user, help="CUIT del usuario PJN (auto-detected from .env)")
+    parser.add_argument("--password", default=auto_pass, help="Password del usuario PJN (auto-detected from .env)")
+
     exp_group = parser.add_mutually_exclusive_group(required=True)
     exp_group.add_argument("--numero-expediente", help="Numero de expediente (ej: 'CNT 40454/2024')")
     exp_group.add_argument("--id-expediente", type=int, help="ID interno numerico del expediente en PJN")
@@ -150,6 +184,10 @@ def main():
     parser.add_argument("--mcp-url", default=MCP_URL_DEFAULT, help="URL del MCP server")
     parser.add_argument("--api-key", default=API_KEY_DEFAULT, help="API key del MCP server")
     args = parser.parse_args()
+
+    if not args.usuario or not args.password:
+        print("ERROR: No se encontraron credenciales PJN. Pasar --usuario y --password o crear ~/.env con PJN_USUARIO y PJN_PASSWORD", file=sys.stderr)
+        sys.exit(1)
 
     # Read and encode PDF
     pdf_path = os.path.expanduser(args.pdf_path)
@@ -178,7 +216,6 @@ def main():
         "descripcion_adjunto": args.descripcion,
     }
 
-    # Usar numero_expediente o id_expediente segun lo que se paso
     if args.numero_expediente:
         tool_args["numero_expediente"] = args.numero_expediente
     else:
