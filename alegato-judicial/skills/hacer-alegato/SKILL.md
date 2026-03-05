@@ -230,22 +230,24 @@ Adaptar segun el tipo de caso y la prueba existente. Secciones posibles:
 
 ### FASE 7: Mostrar al usuario y ajustar
 
-Mostrar el alegato completo al usuario. Preguntar:
+**CRITICO: Mostrar el alegato COMPLETO al usuario en el chat ANTES de generar cualquier archivo.**
+
+Mostrar el texto integro del alegato en el chat para que el usuario lo lea y revise. Preguntar:
 - Si quiere agregar, quitar o modificar algo
 - Si quiere que se amplien ciertos puntos
 - Si falta alguna prueba que no se pudo leer
 
-Iterar hasta que el usuario este conforme.
+Iterar hasta que el usuario este conforme. NO generar archivo ni guardar borrador hasta que el usuario lo apruebe.
 
-### FASE 8: Guardar como borrador y/o generar archivo
+### FASE 8: Generar archivo DOCX
 
-**Generar archivo (SIEMPRE):**
-1. Crear el HTML del alegato formateado
-2. Convertir a PDF con reportlab o wkhtmltopdf
-3. Guardar en `/tmp/alegato_[expediente].pdf`
-4. Informar al usuario la ubicacion del archivo
+**Solo cuando el usuario apruebe el alegato**, generar el archivo Word (.docx):
 
-**Guardar como borrador (si el usuario quiere):**
+1. Generar el DOCX con python-docx
+2. Guardar en `/tmp/alegato_[expediente].docx`
+3. Informar al usuario la ubicacion del archivo
+
+**NO guardar borrador automaticamente.** Solo si el usuario lo pide expresamente, guardar como borrador:
 
 Para PJN:
 - Usar el script `upload_pjn_borrador.py` del plugin escritos-judiciales
@@ -257,7 +259,7 @@ Para SCBA:
 - Titulo: "PARTE ACTORA PRESENTA ALEGATO"
 - texto_html: el HTML del alegato
 
-**IMPORTANTE:** Confirmar con el usuario antes de guardar el borrador.
+**IMPORTANTE:** NUNCA guardar borrador sin que el usuario lo pida explicitamente.
 
 ## Reglas de redaccion
 
@@ -272,46 +274,72 @@ Para SCBA:
 9. **No inventar hechos** — Solo alegar sobre prueba que efectivamente fue producida y consta en el expediente.
 10. **Valorar la prueba** — No solo transcribir, sino ARGUMENTAR por que la prueba favorece a nuestra parte. Usar reglas de la sana critica (art. 386 CPCCN).
 
-## Instrucciones para generar el PDF
+## Instrucciones para generar el DOCX
 
-Para generar el PDF del alegato:
+Generar el alegato como archivo Word (.docx) usando python-docx. Los titulos de seccion (I.- OBJETO, II.- ANTECEDENTES, etc.) deben ir **subrayados y en negrita**.
 
 ```python
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_JUSTIFY, TA_RIGHT, TA_CENTER
+from docx import Document
+from docx.shared import Pt, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-def crear_pdf_alegato(texto, titulo, output_path):
-    doc = SimpleDocTemplate(output_path, pagesize=A4,
-        leftMargin=3*cm, rightMargin=2*cm,
-        topMargin=2*cm, bottomMargin=2*cm)
-    styles = getSampleStyleSheet()
-    estilo_cuerpo = ParagraphStyle('CuerpoAlegato',
-        parent=styles['Normal'], fontSize=12, leading=16,
-        alignment=TA_JUSTIFY, spaceAfter=12, fontName='Times-Roman')
-    estilo_titulo = ParagraphStyle('TituloAlegato',
-        parent=styles['Normal'], fontSize=12, leading=16,
-        alignment=TA_CENTER, spaceAfter=24, fontName='Times-Bold')
-    estilo_subtitulo = ParagraphStyle('SubtituloAlegato',
-        parent=styles['Normal'], fontSize=12, leading=16,
-        alignment=TA_JUSTIFY, spaceAfter=12, fontName='Times-Bold')
-    elementos = [Paragraph(titulo.upper(), estilo_titulo), Spacer(1, 12)]
-    for p in texto.split('\n\n'):
-        p = p.strip()
-        if p:
-            p = p.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br/>')
-            elementos.append(Paragraph(p, estilo_cuerpo))
-    doc.build(elementos)
+def crear_docx_alegato(secciones, titulo_principal, output_path):
+    """
+    secciones: lista de tuplas (titulo_seccion, texto_seccion)
+               titulo_seccion puede ser None para parrafos sin titulo
+    titulo_principal: ej "PARTE ACTORA PRESENTA ALEGATO - INCAPACIDAD 36%"
+    """
+    doc = Document()
+
+    # Configurar margenes
+    for section in doc.sections:
+        section.top_margin = Cm(2)
+        section.bottom_margin = Cm(2)
+        section.left_margin = Cm(3)
+        section.right_margin = Cm(2)
+
+    # Titulo principal (centrado, negrita)
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p.add_run(titulo_principal.upper())
+    run.bold = True
+    run.font.size = Pt(12)
+    run.font.name = 'Times New Roman'
+
+    doc.add_paragraph()  # Espacio
+
+    for titulo_seccion, texto in secciones:
+        if titulo_seccion:
+            # Titulo de seccion: negrita + subrayado
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            run = p.add_run(titulo_seccion)
+            run.bold = True
+            run.underline = True
+            run.font.size = Pt(12)
+            run.font.name = 'Times New Roman'
+
+        # Parrafos del texto
+        for parrafo in texto.split('\n\n'):
+            parrafo = parrafo.strip()
+            if parrafo:
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                run = p.add_run(parrafo)
+                run.font.size = Pt(12)
+                run.font.name = 'Times New Roman'
+
+    doc.save(output_path)
 ```
 
-Si reportlab no esta disponible, generar un HTML limpio y convertir con:
+Si python-docx no esta instalado, instalarlo con:
 ```bash
-python3 -c "
-import subprocess
-subprocess.run(['textutil', '-convert', 'pdf', '/tmp/alegato.html', '-output', '/tmp/alegato.pdf'])
-"
+pip3 install python-docx
+```
+
+Alternativa si python-docx falla: generar un HTML y convertir con textutil:
+```bash
+textutil -convert docx /tmp/alegato.html -output /tmp/alegato.docx
 ```
 
 ## Notas importantes
