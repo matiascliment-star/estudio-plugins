@@ -12,7 +12,7 @@ Usage:
   python3 upload_pjn_borrador.py \
     --usuario 20313806198 \
     --password SECRET \
-    --id-expediente 123456 \
+    --numero-expediente "CNT 40454/2024" \
     --tipo E \
     --pdf-path /tmp/escrito.pdf \
     --pdf-nombre escrito.pdf \
@@ -20,6 +20,8 @@ Usage:
     [--mcp-url https://web-production-78135.up.railway.app/mcp] \
     [--api-key cpacf-mcp-railway-2024-secure-key] \
     [--id-oficina-destino 789]
+
+Also accepts --id-expediente (numeric) as alternative to --numero-expediente.
 """
 
 import argparse
@@ -27,7 +29,6 @@ import base64
 import json
 import os
 import sys
-import uuid
 
 try:
     import requests
@@ -71,7 +72,6 @@ def mcp_request(url, api_key, body, session_id=None):
     else:
         # Direct JSON response
         if resp.status_code == 202:
-            # Notification accepted, no body expected
             return None, new_session_id
         try:
             return resp.json(), new_session_id
@@ -100,7 +100,6 @@ def initialize_session(url, api_key):
     if result and "error" in result:
         raise RuntimeError(f"Initialize error: {result['error']}")
 
-    # Send initialized notification
     notif_body = {
         "jsonrpc": "2.0",
         "method": "notifications/initialized"
@@ -137,7 +136,12 @@ def main():
     parser = argparse.ArgumentParser(description="Upload PDF as borrador to PJN via MCP")
     parser.add_argument("--usuario", required=True, help="CUIT del usuario PJN")
     parser.add_argument("--password", required=True, help="Password del usuario PJN")
-    parser.add_argument("--id-expediente", required=True, type=int, help="ID interno del expediente en PJN")
+
+    # Expediente: acepta numero O id interno
+    exp_group = parser.add_mutually_exclusive_group(required=True)
+    exp_group.add_argument("--numero-expediente", help="Numero de expediente (ej: 'CNT 40454/2024')")
+    exp_group.add_argument("--id-expediente", type=int, help="ID interno numerico del expediente en PJN")
+
     parser.add_argument("--tipo", required=True, help="Tipo de escrito: M, E, C, I, H")
     parser.add_argument("--pdf-path", required=True, help="Path al archivo PDF")
     parser.add_argument("--pdf-nombre", required=True, help="Nombre del PDF (ej: escrito.pdf)")
@@ -168,12 +172,18 @@ def main():
     tool_args = {
         "usuario": args.usuario,
         "password": args.password,
-        "id_expediente": args.id_expediente,
         "tipo_escrito": args.tipo,
         "pdf_base64": pdf_base64,
         "pdf_nombre": args.pdf_nombre,
         "descripcion_adjunto": args.descripcion,
     }
+
+    # Usar numero_expediente o id_expediente segun lo que se paso
+    if args.numero_expediente:
+        tool_args["numero_expediente"] = args.numero_expediente
+    else:
+        tool_args["id_expediente"] = args.id_expediente
+
     if args.id_oficina_destino is not None:
         tool_args["id_oficina_destino"] = args.id_oficina_destino
 
