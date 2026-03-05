@@ -1,0 +1,9 @@
+{
+  "name": "alegato-judicial",
+  "version": "1.0.0",
+  "description": "Genera alegatos judiciales a partir de la prueba producida en el expediente. Lee demanda, contestacion, pericias, testimoniales, documental y demas prueba, y redacta el alegato siguiendo el modelo del estudio Garcia Climent.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["alegato", "prueba", "pericia", "demanda", "contestacion", "sentencia", "laboral", "civil", "pjn", "scba"]
+}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "judicial": {
+      "type": "http",
+      "url": "https://web-production-78135.up.railway.app/mcp",
+      "headers": {
+        "X-API-Key": "cpacf-mcp-railway-2024-secure-key"
+      }
+    }
+  }
+}
