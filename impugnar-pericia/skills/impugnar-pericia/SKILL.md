@@ -249,9 +249,17 @@ Ver `references/plantilla-impugnacion.md` seccion "Decreto 549/2025" y modelo Ba
 - PJN: generar PDF (texto plano formateado)
 - SCBA: generar HTML (para el campo texto_html del borrador)
 
-### FASE 7: Guardar como borrador
+### FASE 7: Mostrar escrito y esperar aprobacion
 
-Confirmar con el usuario antes de guardar.
+**STOP OBLIGATORIO — NO guardar como borrador automaticamente.**
+
+Despues de generar el escrito en la Fase 6:
+1. Mostrar el texto completo del escrito al usuario en el chat
+2. Preguntarle: "¿Queres que lo guarde como borrador en [PJN/SCBA]? ¿Queres cambiar algo antes?"
+3. **Esperar la respuesta del usuario**. NO llamar a ninguna tool de guardado hasta que el usuario diga expresamente que lo guarde.
+4. El usuario puede pedir cambios, correcciones, agregar o quitar observaciones antes de guardar
+
+Solo cuando el usuario confirme EXPRESAMENTE ("dale", "guardalo", "si", etc.), guardar:
 
 **Para PJN:**
 ```
@@ -274,7 +282,7 @@ Parametros:
   - titulo: "IMPUGNA PERICIA MEDICA"
 ```
 
-**IMPORTANTE:** Nunca usar `pjn_presentar_escrito` ni `pjn_enviar_borrador` sin confirmacion EXPLICITA del usuario. Guardar siempre como BORRADOR primero.
+**PROHIBIDO:** Nunca usar `pjn_presentar_escrito` ni `pjn_enviar_borrador` sin confirmacion EXPLICITA del usuario. Nunca guardar borrador sin que el usuario haya visto el escrito y dicho que lo guarde.
 
 ## Instrucciones para generar el PDF
 
