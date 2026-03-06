@@ -20,16 +20,75 @@ Este skill se encarga de convertir un escrito a HTML y subirlo como borrador al 
 
 A diferencia del PJN (que usa PDF), la SCBA trabaja con HTML — el contenido del escrito se renderiza en CKEditor dentro del portal. Si además hay documental (PDFs adjuntos), se usa el script helper para evitar problemas de tamaño con el base64.
 
+## REGLA CRÍTICA: PRESERVAR EL FORMATO EXACTO DEL DOCUMENTO APROBADO
+
+**NUNCA subir un documento con formato distinto al que el usuario aprobó.** El formato del escrito es tan importante como su contenido. Cuando el usuario entrega un Word (.docx) o un PDF ya formateado, el HTML que se suba al MEV debe reproducir EXACTAMENTE el mismo formato visual del original.
+
+### Qué se debe preservar exactamente:
+- **Negritas** → `<strong>` o `<b>`
+- **Subrayados** → `<u>` (NO usar `<span style="text-decoration:underline">`, usar directamente `<u>`)
+- **Cursivas** → `<em>` o `<i>`
+- **Colores de texto** → `<span style="color: #XXXXXX">` (si el documento usa colores, mantenerlos)
+- **Tablas** → `<table>`, `<tr>`, `<td>`, `<th>` con bordes y ancho de columnas
+- **Alineación** → `style="text-align: justify/center/right"`
+- **Listas** numeradas y con viñetas → `<ol>`, `<ul>`, `<li>`
+- **Tamaño de fuente** si varía → `<span style="font-size: Xpx">`
+
+### Cómo convertir según el formato de origen:
+
+#### Si el usuario da un Word (.docx):
+**USAR `python-docx` o `mammoth`** para extraer el HTML preservando formato:
+```bash
+pip install mammoth --break-system-packages
+```
+```python
+import mammoth
+with open("documento.docx", "rb") as f:
+    result = mammoth.convert_to_html(f)
+    html = result.value  # Preserva negritas, cursivas, subrayados, tablas, listas
+```
+`mammoth` convierte Word a HTML limpio preservando: negritas (`<strong>`), cursivas (`<em>`), subrayados, tablas, listas, links. Alternativa: `python-docx` para mayor control manual.
+
+**NO usar la función simple `texto_a_html_scba()`** para convertir Word — esa función es solo para texto plano y pierde TODO el formato.
+
+#### Si el usuario da un PDF:
+Extraer el texto con formato. Si el PDF tiene formato complejo (tablas, colores), considerar usar `pdfplumber` o `pymupdf` para extraer preservando estructura, y reconstruir el HTML respetando el formato original.
+
+#### Si el usuario da texto plano (sin archivo):
+Ahí sí usar la función `texto_a_html_scba()` estándar. Pero si el usuario indica formato específico (ej: "poné tal parte en negrita", "subrayá el título"), respetarlo en el HTML generado.
+
+### Regla de oro:
+**Si el usuario aprobó un documento con determinado formato, lo que se sube al MEV debe verse EXACTAMENTE igual.** Si no podés preservar el formato, informar al usuario ANTES de subir — NUNCA subir algo con formato distinto sin avisar.
+
 ## Flujo completo
 
-### Escrito solo texto (sin adjuntos)
+### Si el usuario da un Word (.docx) — sin adjuntos
+1. **Leer el Word** y extraer HTML con `mammoth` preservando TODO el formato (negritas, subrayados, colores, tablas)
+2. **NO usar la función `texto_a_html_scba()`** — pierde el formato del Word
+3. **Obtener los IDs de la causa** (id_org e id_causa del MEV)
+4. **Llamar a la tool MCP `scba_guardar_borrador`** con el HTML extraído
+5. **Confirmar al usuario**
+
+### Si el usuario da un Word (.docx) — con adjuntos
+1. **Leer el Word** y extraer HTML con `mammoth` preservando formato
+2. **Guardar el HTML** en archivo temporal
+3. **Ejecutar el script `upload_scba_adjuntos.py`** con el HTML y los PDFs adjuntos
+4. **Confirmar al usuario**
+
+### Si el usuario da un PDF como escrito
+1. **Extraer texto del PDF** preservando formato (negritas, tablas, estructura)
+2. **Convertir a HTML** respetando el formato original del PDF
+3. **Obtener los IDs de la causa** y subir como borrador
+4. **Confirmar al usuario**
+
+### Escrito solo texto plano (sin archivo, sin adjuntos)
 1. **Obtener el texto del escrito**
-2. **Convertir a HTML** con formato judicial
+2. **Convertir a HTML** con la función `texto_a_html_scba()` (formato judicial estándar)
 3. **Obtener los IDs de la causa** (id_org e id_causa del MEV)
 4. **Llamar a la tool MCP `scba_guardar_borrador`** (el HTML es texto pequeño, no hay problema)
 5. **Confirmar al usuario**
 
-### Escrito con documental (PDFs adjuntos)
+### Escrito texto plano con documental (PDFs adjuntos)
 1. **Obtener el texto del escrito + archivos PDF**
 2. **Convertir texto a HTML** y guardar en archivo temporal
 3. **Ejecutar el script `upload_scba_adjuntos.py`** que maneja los PDFs internamente
@@ -47,7 +106,19 @@ Leer `.env` antes de hacer cualquier operación. Si no hay credenciales, pedirla
 
 El sistema SCBA espera HTML simple que se renderiza en CKEditor. No hace falta CSS sofisticado — solo tags HTML estándar.
 
-### Formato HTML judicial estándar
+### Conversión desde Word (.docx) — PRESERVAR FORMATO
+```python
+import mammoth
+# mammoth preserva: negritas, cursivas, subrayados, tablas, listas, links
+with open("documento.docx", "rb") as f:
+    result = mammoth.convert_to_html(f)
+    html = result.value
+```
+Instalar si no está: `pip install mammoth --break-system-packages`
+
+**IMPORTANTE**: El HTML generado por mammoth ya viene con las tags correctas (`<strong>`, `<em>`, `<table>`, etc.) que CKEditor SCBA soporta. Usarlo directamente sin modificar el formato.
+
+### Formato HTML judicial estándar (SOLO PARA TEXTO PLANO — NO usar para Word/PDF)
 
 ```python
 def texto_a_html_scba(texto, titulo):
@@ -207,10 +278,14 @@ Si el script o las tools MCP no están disponibles, informar al usuario que el s
 1. Leer `.env` para obtener `MEV_USUARIO` y `MEV_PASSWORD`
 2. Confirmar con el usuario: causa (número o carátula), tipo de presentación, y contenido
 3. Obtener `id_org` e `id_causa` (si no los tenés, usar la **tool MCP** `mev_listar_causas`)
-4. Convertir el escrito a HTML
+4. Convertir el escrito a HTML **preservando el formato exacto del original**:
+   - **Word (.docx)** → Usar `mammoth` para extraer HTML con formato (negritas, subrayados, colores, tablas). **NUNCA usar `texto_a_html_scba()` para Word.**
+   - **PDF** → Extraer texto preservando estructura y formato, reconstruir HTML fiel al original
+   - **Texto plano** → Usar `texto_a_html_scba()` estándar
 5. **Sin adjuntos**: Llamar a la tool MCP `scba_guardar_borrador` directamente
 6. **Con adjuntos**: Guardar HTML en archivo temporal + ejecutar `${CLAUDE_PLUGIN_ROOT}/scripts/upload_scba_adjuntos.py`
 7. Informar al usuario el resultado
 8. Recordar que el borrador debe firmarse digitalmente desde notificaciones.scba.gov.ar
+9. **NUNCA subir un documento con formato diferente al que el usuario aprobó**
 
 El borrador NO se presenta automáticamente — siempre queda como borrador para firma digital manual. Esto es intencional y no se puede cambiar desde la API.

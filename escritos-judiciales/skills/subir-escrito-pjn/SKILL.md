@@ -19,6 +19,40 @@ description: >
 
 Este skill se encarga de subir un escrito como borrador al sistema de presentaciones electrónicas del PJN (escritos.pjn.gov.ar). El borrador queda en la bandeja MIS_BORRADORES para que el usuario lo firme digitalmente y lo presente desde el portal.
 
+## REGLA CRÍTICA: PRESERVAR EL FORMATO EXACTO DEL DOCUMENTO APROBADO
+
+**NUNCA subir un documento con formato distinto al que el usuario aprobó.** El formato del escrito es tan importante como su contenido. Cuando el usuario entrega un Word (.docx) o un PDF ya formateado, el borrador que se suba al PJN debe ser IDÉNTICO visualmente al original.
+
+### Qué se debe preservar exactamente:
+- **Negritas** (`<b>`, `<strong>`)
+- **Subrayados** (`<u>`)
+- **Cursivas** (`<i>`, `<em>`)
+- **Colores de texto** (si el documento usa colores, mantenerlos)
+- **Tablas** (estructura, bordes, ancho de columnas)
+- **Alineación** (justificado, centrado, derecha, izquierda)
+- **Tamaño y tipo de fuente** si es relevante
+- **Interlineado y espaciado** entre párrafos
+- **Sangrías** y tabulaciones
+- **Listas** numeradas y con viñetas
+
+### Cómo convertir según el formato de origen:
+
+#### Si el usuario da un Word (.docx):
+**USAR `libreoffice` para convertir a PDF**, que preserva el formato exacto:
+```bash
+libreoffice --headless --convert-to pdf --outdir /tmp "/path/al/documento.docx"
+```
+**NO usar reportlab** para convertir Word a PDF — reportlab pierde TODO el formato (negritas, subrayados, colores, tablas). Solo usar reportlab cuando el usuario da texto plano sin formato.
+
+#### Si el usuario da un PDF:
+Usar el PDF tal cual está. NO reconvertirlo ni modificarlo.
+
+#### Si el usuario da texto plano (sin archivo):
+Ahí sí usar reportlab con el template estándar (ver sección más abajo). Pero si el usuario indica formato específico (ej: "poné tal parte en negrita"), respetarlo.
+
+### Regla de oro:
+**Si el usuario aprobó un documento con determinado formato, lo que se sube al PJN debe verse EXACTAMENTE igual.** Si no podés preservar el formato, informar al usuario ANTES de subir — NUNCA subir algo con formato distinto sin avisar.
+
 ## REGLA PRINCIPAL: NO preguntar datos que se pueden inferir
 
 **El agente NO debe preguntar al usuario datos que puede extraer del documento o inferir del contexto.** Específicamente:
@@ -31,14 +65,22 @@ Este skill se encarga de subir un escrito como borrador al sistema de presentaci
 
 ## Flujo completo
 
+### Si el usuario sube un Word (.docx):
+1. **Leer el Word** para extraer: número de expediente, título/sumario, tipo de escrito
+2. **Convertir a PDF con libreoffice** (`libreoffice --headless --convert-to pdf --outdir /tmp "archivo.docx"`) — esto preserva TODO el formato original (negritas, subrayados, colores, tablas, etc.)
+3. **NUNCA usar reportlab para convertir Word** — pierde el formato
+4. **Leer `.env`** para credenciales PJN
+5. **Ejecutar el script de upload** con los datos extraídos
+6. **Informar resultado** al usuario
+
 ### Si el usuario sube un PDF ya hecho:
 1. **Leer el PDF** para extraer: número de expediente, título/sumario, tipo de escrito
-2. **Copiar el PDF a /tmp** si no está ahí
+2. **Copiar el PDF a /tmp** si no está ahí — NO reconvertirlo ni modificarlo
 3. **Leer `.env`** para credenciales PJN
 4. **Ejecutar el script de upload** directamente con los datos extraídos
 5. **Informar resultado** al usuario
 
-### Si el usuario da texto para convertir a PDF:
+### Si el usuario da texto plano para convertir a PDF:
 1. **Extraer** del texto: número de expediente, título/sumario, tipo de escrito
 2. **Generar PDF** con reportlab y guardar en `/tmp/escrito_pjn.pdf`
 3. **Leer `.env`** para credenciales PJN
@@ -53,7 +95,18 @@ Las credenciales del PJN están en el archivo `.env` de la carpeta del usuario:
 
 Leer `.env` antes de hacer cualquier operación. Si no hay credenciales, pedirlas al usuario.
 
-## Conversión del escrito a PDF (solo si el usuario da texto, NO si ya da un PDF)
+## Conversión del escrito a PDF
+
+### Si el usuario da un Word (.docx): USAR LIBREOFFICE
+```bash
+libreoffice --headless --convert-to pdf --outdir /tmp "/path/al/documento.docx"
+```
+Esto genera un PDF idéntico al Word original, preservando negritas, subrayados, colores, tablas, y todo el formato.
+
+### Si el usuario da un PDF: USARLO TAL CUAL
+No reconvertir. Copiar directamente a `/tmp/` si no está ahí.
+
+### Si el usuario da texto plano (solo si da texto, NO si ya da un archivo formateado)
 
 ```python
 import base64
@@ -138,10 +191,14 @@ El formato es: `JURISDICCION NUMERO/AÑO`. Ejemplos:
 ## Instrucciones para el agente (resumen)
 
 1. Leer `.env` → `PJN_USUARIO` y `PJN_PASSWORD`
-2. Si el usuario sube un PDF → leerlo, extraer expediente + tipo. Si da texto → generar PDF con reportlab
+2. Determinar el formato del archivo de entrada:
+   - **Word (.docx)** → Convertir a PDF con `libreoffice --headless --convert-to pdf` (preserva formato exacto). **NUNCA usar reportlab para Word.**
+   - **PDF** → Usarlo tal cual, sin reconvertir
+   - **Texto plano** → Generar PDF con reportlab
 3. **NO preguntar** lo que se puede extraer o inferir
-4. Copiar/generar PDF en `/tmp/`
+4. El PDF en `/tmp/` debe ser IDÉNTICO al documento original en formato (negritas, subrayados, colores, tablas)
 5. Ejecutar `upload_pjn_borrador.py` con `--numero-expediente` (NO hace falta buscar el ID interno)
 6. Informar resultado + recordar que debe firmar desde escritos.pjn.gov.ar
+7. **NUNCA subir un documento con formato diferente al que el usuario aprobó**
 
 Si el usuario quiere enviar el borrador al tribunal (IRREVERSIBLE), usar la tool MCP `pjn_enviar_borrador`. Confirmar SIEMPRE antes.
