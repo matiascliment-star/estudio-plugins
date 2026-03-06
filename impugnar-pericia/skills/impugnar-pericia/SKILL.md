@@ -260,11 +260,8 @@ Cuando el error principal es la aplicacion retroactiva del 549/2025, el escrito 
 
 Ver `references/plantilla-impugnacion.md` seccion "Decreto 549/2025". **Copiar los textos literales del modelo Barrientos en `references/modelos-impugnacion.md`**, reemplazando unicamente los datos del caso (nombre perito, porcentajes, fechas, patologias). NO parafrasear el modelo Barrientos.
 
-**NOTAS AL PIE / CITAS DE JURISPRUDENCIA:**
-Algunos modelos tienen citas de jurisprudencia con notas al pie (marcadas como `[^N]` en el texto y la referencia completa al final). Al generar el escrito, las citas de jurisprudencia deben ir como NOTAS AL PIE del documento:
-- En PDF (PJN): usar superindice numerico en el cuerpo y listar las notas al pie al final del escrito
-- En HTML (SCBA): usar `<sup>N</sup>` en el cuerpo y agregar las notas al pie al final con `<hr>` separador
-- Copiar las citas de jurisprudencia TAL CUAL aparecen en el modelo (tribunal, sala, caratula, expediente, fecha)
+**CITAS DE JURISPRUDENCIA:**
+Algunos modelos tienen citas de jurisprudencia con la referencia del caso entre parentesis despues de la cita. Al generar el escrito, las citas de jurisprudencia deben ir ENTRE PARENTESIS inmediatamente despues del texto citado, tal como aparecen en los modelos. Ejemplo: "...es de 7.60%" (CNAT, SALA VII, "MIRANDA DARIO EDUARDO C/ GALENO...", Expte. 73939/2015, Sentencia del 28/03/2018). Copiar las citas TAL CUAL aparecen en el modelo (tribunal, sala, caratula, expediente, fecha). NO ponerlas como notas al pie.
 
 **Formato segun jurisdiccion:**
 - PJN: generar PDF (texto plano formateado)
