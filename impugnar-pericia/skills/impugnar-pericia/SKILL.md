@@ -30,7 +30,7 @@ Antes de ejecutar el control, leer estos archivos de referencia:
 - `skills/impugnar-pericia/references/controles-pericia.md` — Checklist de controles
 - `skills/impugnar-pericia/references/plantilla-impugnacion.md` — Template del escrito
 - `skills/impugnar-pericia/references/argumentos-medico-legales.md` — Catalogo de argumentos legales
-- `skills/impugnar-pericia/references/modelos-impugnacion.md` — **42 modelos reales** de escritos del estudio, organizados por categoria (factores, rodilla, hernias, nervios, psiquica, causalidad, baremo, etc.). USAR COMO REFERENCIA PRINCIPAL de estilo, estructura y argumentacion
+- `skills/impugnar-pericia/references/modelos-impugnacion.md` — **42+ modelos reales** de escritos del estudio, organizados por categoria (factores, rodilla, hernias, nervios, psiquica, causalidad, baremo, etc.). **CRITICO: estos modelos contienen los TEXTOS LITERALES que hay que usar. NO parafrasear. Copiar el texto tal cual del modelo que corresponda y solo reemplazar los datos del caso** (nombre del perito, porcentajes, fechas, expediente, partes, lateralidad, etc.)
 
 ## Flujo de 7 Fases
 
@@ -219,14 +219,29 @@ Solo con las observaciones que el usuario confirmo en la Fase 5bis.
 
 Leer `references/plantilla-impugnacion.md` para el formato y `references/argumentos-medico-legales.md` para los argumentos.
 
+**REGLA FUNDAMENTAL: COPIAR TEXTOS LITERALES DE LOS MODELOS**
+
+Para cada observacion que el usuario confirmo, buscar en `references/modelos-impugnacion.md` el modelo que corresponda a esa categoria de error. **Copiar el texto LITERAL del modelo**, reemplazando UNICAMENTE los datos especificos del caso:
+- Nombre del perito (Dr. XXX)
+- Porcentajes concretos (incapacidad, factores)
+- Fechas (accidente, pericia, traslado)
+- Datos del expediente (caratula, numero, partes)
+- Lateralidad (derecha/izquierda)
+- Edad del actor
+- Tareas habituales
+- Patologias especificas del caso
+
+**NO reescribir, NO parafrasear, NO "mejorar" la redaccion de los modelos.** Los modelos son textos probados en la practica del estudio que fueron aprobados por los jueces. Mantener exactamente la misma estructura de frases, citas legales, y argumentacion. Si un modelo dice "La decision es erronea porque segun lo establecido en el Decreto 659/96..." usar esa misma frase, no inventar otra.
+
+Si hay mas de un modelo aplicable para la misma categoria, elegir el que mas se ajuste al caso concreto.
+
+Si NO hay modelo para una observacion especifica, recien ahi redactar siguiendo el estilo de los modelos existentes.
+
 El escrito debe:
-1. Tener encabezado con datos del expediente
+1. Tener encabezado con datos del expediente (usar modelo de "ESCRITO VACIO PERICIA MED IMPUGNA PERICIA" como estructura base)
 2. Titulo "IMPUGNA PERICIA MEDICA" (o "OBSERVA PERICIA MEDICA" segun el caso)
 3. Objeto: "Que vengo a impugnar la pericia medica presentada por el Dr. [nombre] de fecha [fecha]..."
-4. Desarrollo: observaciones NUMERADAS, cada una con:
-   - El error detectado
-   - La fundamentacion legal/tecnica (con citas al baremo, CPCCN, LRT)
-   - Lo que se solicita
+4. Desarrollo: observaciones NUMERADAS, cada una **copiada del modelo correspondiente** con datos del caso reemplazados
 5. Petitorio pidiendo:
    - Que se haga lugar a la impugnacion
    - Que el perito brinde explicaciones (art. 473 CPCCN / 474 CPCCBA)
@@ -243,7 +258,7 @@ Cuando el error principal es la aplicacion retroactiva del 549/2025, el escrito 
 - **Demas observaciones**: otros errores detectados (factor edad, etc.)
 - **Petitorio especifico**: incluir punto de inconstitucionalidad y reserva caso federal
 
-Ver `references/plantilla-impugnacion.md` seccion "Decreto 549/2025" y modelo Barrientos en `references/modelos-impugnacion.md` como referencia de estilo y estructura.
+Ver `references/plantilla-impugnacion.md` seccion "Decreto 549/2025". **Copiar los textos literales del modelo Barrientos en `references/modelos-impugnacion.md`**, reemplazando unicamente los datos del caso (nombre perito, porcentajes, fechas, patologias). NO parafrasear el modelo Barrientos.
 
 **Formato segun jurisdiccion:**
 - PJN: generar PDF (texto plano formateado)

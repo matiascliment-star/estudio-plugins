@@ -2,7 +2,8 @@
 
 
 Catalogo de modelos reales de escritos de impugnacion, organizados por categoria.
-Usar como referencia de estilo, estructura y argumentacion al generar nuevos escritos.
+
+**INSTRUCCION: Estos son textos LITERALES probados en la practica del estudio. Al generar un escrito, COPIAR el texto tal cual del modelo que corresponda y solo reemplazar los datos del caso (nombre perito, porcentajes, fechas, expediente, partes, lateralidad, edad, tareas, patologias). NO parafrasear, NO reescribir, NO "mejorar" la redaccion.**
 
 ---
 
