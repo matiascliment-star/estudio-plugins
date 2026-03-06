@@ -61,19 +61,26 @@ Necesitas leer TRES fuentes de informacion:
 
 2. **La PERICIA MEDICA** — El documento a controlar
 
-3. **El DICTAMEN SRT / COMISION MEDICA** — Para comparar:
-   - Que incapacidad determino la SRT (puede ser 0%)
-   - Que patologias reconocio/rechazo
-   - Si aplico baremo y cual
-   - La fecha del dictamen
+3. **El EXPEDIENTE SRT** — Del expediente administrativo de la SRT lo que importa es:
+   - **PRIMORDIAL: El DICTAMEN MEDICO** de Comision Medica — Retener:
+     - Que incapacidad determino (puede ser 0%)
+     - Que patologias reconocio/rechazo
+     - Si aplico baremo y cual
+     - La fecha del dictamen
+   - **SECUNDARIO: La HISTORIA CLINICA** — Retener:
+     - Diagnosticos y tratamientos realizados
+     - Estudios medicos mencionados (RMN, EMG, radiografias)
+     - Fecha de alta medica
+     - Evolución del cuadro
+   - Hay que buscar dentro del expediente SRT hasta encontrar el dictamen medico. El expediente SRT puede tener muchas fojas, pero el dictamen es lo esencial.
 
 **Para PJN (CABA / Nacional):**
 Usar `pjn_leer_documentos` con `max_documentos: 10` y `max_movimientos: 50`. Buscar la demanda y la pericia medica en los documentos leidos.
 
 Si `pjn_leer_documentos` no trae ambos documentos, intentar con `max_movimientos: 100`.
 
-Para obtener el dictamen SRT / Comision Medica:
-- **El expediente de Comision Medica esta en el PRIMER DEO** (Despacho de Expedientes y Oficios). Buscar en los movimientos el primer despacho tipo "DEO" o "DOCUMENTAL DE INICIO" — ahi se adjunta el expediente administrativo de la SRT con el dictamen de Comision Medica.
+Para obtener el expediente SRT con el dictamen medico:
+- **El expediente SRT esta en el PRIMER DEO** (Despacho de Expedientes y Oficios). Buscar en los movimientos el primer despacho tipo "DEO" o "DOCUMENTAL DE INICIO" — ahi se adjunta el expediente administrativo de la SRT completo. Dentro de ese expediente, buscar hasta encontrar el dictamen medico de Comision Medica.
 - Si no se encuentra en el DEO, buscar en el texto de la demanda el numero de expediente SRT (ej: "Expediente SRT 618936/23")
 - Si no aparece, pedirle al usuario que lo pegue en el chat
 
@@ -81,9 +88,9 @@ Para obtener el dictamen SRT / Comision Medica:
 1. Usar `mev_listar_causas` para encontrar la causa y obtener `idc` e `ido`
 2. Usar `mev_obtener_movimientos` con `idc` e `ido` para ver TODOS los movimientos de la causa
 3. Identificar en los movimientos: demanda, pericia medica
-4. **El dictamen de Comision Medica se encuentra en una CONTESTACION DE OFICIO**. Buscar en los movimientos un tramite tipo "contestacion de oficio", "oficio contestado", "informe SRT", "oficio SRT" — generalmente el dictamen viene adjunto como PDF en ese tramite.
+4. **El expediente SRT con el dictamen medico se encuentra en una CONTESTACION DE OFICIO**. Buscar en los movimientos un tramite tipo "contestacion de oficio", "oficio contestado", "informe SRT", "oficio SRT" — generalmente viene adjunto como PDF. Dentro de ese PDF, buscar hasta encontrar el dictamen medico de Comision Medica.
 5. Usar `mev_leer_documentos` con los movimientos relevantes identificados
-6. Si no se encuentra la contestacion de oficio con el dictamen, o si el PDF no se puede leer (imagen escaneada), pedirle al usuario que lo pegue en el chat
+6. Si no se encuentra la contestacion de oficio, o si el PDF no se puede leer (imagen escaneada), pedirle al usuario que lo pegue en el chat
 
 **IMPORTANTE**: El dictamen SRT es clave porque:
 - Si la SRT dio 0% y el perito da incapacidad → la pericia es favorable, tener cuidado al impugnar
