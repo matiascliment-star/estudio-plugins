@@ -41,22 +41,32 @@ python3 <skill-path>/scripts/download_thumbs.py <metadata.json> <output-dir> --a
 Esto genera archivos como `0000_00.jpg`, `0000_01.jpg`, ..., `0000_07.jpg` para la propiedad 0, etc.
 Con 25 workers en paralelo, ~5000 fotos se descargan en 1-2 minutos.
 
-### Paso 3: Armar montajes en grilla multi-foto
+### Paso 3-4: Revisión visual por batches
 
-Usar el script `scripts/make_grids.py` con `--multi` para crear grillas donde cada celda muestra TODAS las fotos de una propiedad en mosaico (4 columnas × 2 filas de mini-thumbnails). Ejecutar:
-```bash
-python3 <skill-path>/scripts/make_grids.py <metadata.json> <thumbs-dir> <output-dir> --multi
-```
+**IMPORTANTE: Límite de 250 propiedades por batch.** Si hay más de 250 propiedades, dividir en batches y procesar cada uno por separado, seleccionando las mejores de cada batch. Al final, hacer una ronda final con todas las seleccionadas.
 
-Cada grilla tiene 20 propiedades (5 columnas × 4 filas). Con 700 propiedades son ~35 grillas.
+**Para cada batch:**
 
-### Paso 4: Revisión visual de grillas
+1. Armar un JSON parcial con las propiedades del batch (ej: propiedades 0-249, luego 250-499, etc.)
+2. Armar grillas multi-foto del batch:
+   ```bash
+   python3 <skill-path>/scripts/make_grids.py <batch.json> <thumbs-dir> <output-dir> --multi
+   ```
+   Cada grilla tiene 20 propiedades (5 cols × 4 filas), cada celda con mosaico 4×2 de fotos. Un batch de 250 = ~13 grillas.
+3. Recorrer TODAS las grillas del batch con Read. Seleccionar las ~30 mejores del batch.
 
-Recorrer TODAS las grillas con Read. Ver TODAS, no saltear ninguna. Cada celda muestra hasta 8 fotos de la propiedad (living, cocina, baño, dormitorio, balcón, amenities) — evaluar el conjunto completo.
+**Ejemplo con 1000 propiedades:**
+- Batch 1 (props 0-249): revisar 13 grillas → seleccionar ~30 mejores
+- Batch 2 (props 250-499): revisar 13 grillas → seleccionar ~30 mejores
+- Batch 3 (props 500-749): revisar 13 grillas → seleccionar ~30 mejores
+- Batch 4 (props 750-999): revisar 13 grillas → seleccionar ~30 mejores
+- **Ronda final**: con las ~120 seleccionadas, armar grillas y elegir las top 30
 
-### Paso 5: Profundizar en las candidatas
+Si hay ≤ 250 propiedades, se hace un solo pase directo sin batches.
 
-Para las propiedades que pasaron el filtro visual (típicamente 20-30):
+### Paso 5: Profundizar en las finalistas
+
+Para las propiedades finalistas (~20-30):
 1. Obtener sus datos completos del JSON de metadata, incluyendo el campo `imagenes` (array de URLs de todas las fotos)
 2. Para cada candidata, armar las URLs en alta resolución: reemplazar `/360x266/` por `/730x532/` en cada URL del array `imagenes`
 3. Ver 2-3 fotos en alta resolución con Read para evaluar detalles (terminaciones, humedad, red flags)
@@ -64,7 +74,7 @@ Para las propiedades que pasaron el filtro visual (típicamente 20-30):
 
 ### Paso 6: Ranking final
 
-Top 3, Interesantes, Descartadas. Incluir links de ZonaProp.
+Top 3, Top 10, Interesantes. Incluir links de ZonaProp.
 
 ### Paso 7: Generar HTML report
 
