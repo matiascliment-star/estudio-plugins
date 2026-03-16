@@ -151,26 +151,24 @@ def predownload_photos(props):
     # For each prop: remove failed downloads, then move logos (< 5KB) to the end
     logos_moved = 0
     for pi, p in enumerate(props):
-        embedded = []
+        real_photos = []
         logos = []
-        for fi, foto in enumerate(p.get("fotos", [])):
+        for foto in p.get("fotos", []):
             if not foto.startswith("data:"):
-                continue  # failed download
-            # Find original URL to check size
-            orig_url = None
-            for url, locs in url_map.items():
-                for loc_pi, loc_fi in locs:
-                    if loc_pi == pi and loc_fi == fi:
-                        orig_url = url
-                        break
-            size = results.get(orig_url, (None, 0))[1] if orig_url else 999999
+                continue  # failed download, skip
+            # Decode base64 to measure actual image size
+            try:
+                raw = foto.split(",", 1)[1]
+                size = len(base64.b64decode(raw))
+            except Exception:
+                size = 999999
             if size < LOGO_THRESHOLD:
                 logos.append(foto)
             else:
-                embedded.append(foto)
+                real_photos.append(foto)
         if logos:
             logos_moved += len(logos)
-        p["fotos"] = embedded + logos  # real photos first, logos at the end
+        p["fotos"] = real_photos + logos  # real photos first, logos at the end
 
     ok = len(results)
     print(f"  {ok}/{total} fotos embebidas OK ({logos_moved} logos movidos al final)")
