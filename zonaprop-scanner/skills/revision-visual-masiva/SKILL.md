@@ -31,30 +31,35 @@ Parámetros opcionales de filtro: barrio, precio_min, precio_max, m2_min, m2_max
 
 Guardar el JSON resultado en un archivo temporal (ej: `/tmp/propiedades.json`).
 
-### Paso 2: Descargar thumbnails
+### Paso 2: Descargar TODAS las fotos
 
-Usar el script `scripts/download_thumbs.py` para descargar en paralelo los thumbnails. Ejecutar:
+Usar el script `scripts/download_thumbs.py` con `--all` para descargar TODAS las fotos de cada propiedad (hasta 8 por aviso). Ejecutar:
 ```bash
-python3 <skill-path>/scripts/download_thumbs.py <metadata.json> <output-dir>
+python3 <skill-path>/scripts/download_thumbs.py <metadata.json> <output-dir> --all
 ```
 
-### Paso 3: Armar montajes en grilla
+Esto genera archivos como `0000_00.jpg`, `0000_01.jpg`, ..., `0000_07.jpg` para la propiedad 0, etc.
+Con 25 workers en paralelo, ~5000 fotos se descargan en 1-2 minutos.
 
-Usar el script `scripts/make_grids.py` para crear imágenes de contacto (50 props por grilla). Ejecutar:
+### Paso 3: Armar montajes en grilla multi-foto
+
+Usar el script `scripts/make_grids.py` con `--multi` para crear grillas donde cada celda muestra TODAS las fotos de una propiedad en mosaico (4 columnas × 2 filas de mini-thumbnails). Ejecutar:
 ```bash
-python3 <skill-path>/scripts/make_grids.py <metadata.json> <thumbs-dir> <output-dir>
+python3 <skill-path>/scripts/make_grids.py <metadata.json> <thumbs-dir> <output-dir> --multi
 ```
+
+Cada grilla tiene 20 propiedades (5 columnas × 4 filas). Con 700 propiedades son ~35 grillas.
 
 ### Paso 4: Revisión visual de grillas
 
-Recorrer TODAS las grillas con Read. Ver TODAS, no saltear ninguna.
+Recorrer TODAS las grillas con Read. Ver TODAS, no saltear ninguna. Cada celda muestra hasta 8 fotos de la propiedad (living, cocina, baño, dormitorio, balcón, amenities) — evaluar el conjunto completo.
 
 ### Paso 5: Profundizar en las candidatas
 
 Para las propiedades que pasaron el filtro visual (típicamente 20-30):
 1. Obtener sus datos completos del JSON de metadata, incluyendo el campo `imagenes` (array de URLs de todas las fotos)
-2. Para cada candidata, armar las URLs en alta resolución de TODAS sus fotos (hasta 8): reemplazar `/360x266/` por `/730x532/` en cada URL del array `imagenes`
-3. Ver 2-3 fotos con Read para evaluar (estado, terminaciones, luminosidad, red flags)
+2. Para cada candidata, armar las URLs en alta resolución: reemplazar `/360x266/` por `/730x532/` en cada URL del array `imagenes`
+3. Ver 2-3 fotos en alta resolución con Read para evaluar detalles (terminaciones, humedad, red flags)
 4. **Guardar TODAS las URLs hires** (no solo las que se vieron) — se usan en el Paso 7 para el HTML report
 
 ### Paso 6: Ranking final
