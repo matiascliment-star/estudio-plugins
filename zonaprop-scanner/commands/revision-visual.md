@@ -11,3 +11,4 @@ Revisión visual masiva de propiedades inmobiliarias.
 5. Recorrer TODAS las grillas visualmente e identificar las propiedades más atractivas.
 6. Profundizar en las candidatas con fotos en mayor resolución (730x532).
 7. Armar ranking final: Top 3, Interesantes, Descartadas. Incluir links de ZonaProp.
+8. Generar HTML interactivo con fotos embebidas usando `scripts/make_html_report.py`. El HTML se guarda en `outputs/`.

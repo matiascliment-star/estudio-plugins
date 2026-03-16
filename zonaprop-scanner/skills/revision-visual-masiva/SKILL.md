@@ -51,11 +51,60 @@ Recorrer TODAS las grillas con Read. Ver TODAS, no saltear ninguna.
 
 ### Paso 5: Profundizar en las candidatas
 
-Descargar fotos en mayor resolución (reemplazar /360x266/ por /730x532/).
+Para las propiedades que pasaron el filtro visual (típicamente 10-20):
+1. Obtener sus datos completos del JSON de metadata
+2. Crear una carpeta `hires/` en el directorio de trabajo
+3. Descargar 2-3 fotos en mayor resolución (reemplazar `/360x266/` por `/730x532/` en la URL)
+4. **Guardar las fotos en `hires/` con nombres vinculados a cada propiedad**: `{idx:04d}_01.jpg`, `{idx:04d}_02.jpg`, etc. donde `idx` es el índice original de la propiedad en el metadata.json
+5. Ver cada foto con Read y evaluar:
+   - Estado general y mantenimiento
+   - Calidad de terminaciones (pisos, cocina, baños)
+   - Luminosidad
+   - Red flags (humedad, grietas, renders truchos vs fotos reales)
+   - Si el precio parece acorde a lo que se ve
 
 ### Paso 6: Ranking final
 
 Top 3, Interesantes, Descartadas. Incluir links de ZonaProp.
+
+### Paso 7: Generar HTML report
+
+Después del ranking, generar un HTML interactivo con fotos embebidas usando `scripts/make_html_report.py`.
+
+1. Armar un JSON con la estructura que espera el script:
+   ```json
+   {
+     "stats": {
+       "total_escaneadas": <total de propiedades revisadas>,
+       "seleccionadas": <cantidad en el ranking>,
+       "top_picks": <cantidad en top3>,
+       "rango_precios": "USD XXk-XXXk"
+     },
+     "propiedades": [
+       {
+         "tier": "top3" | "top10" | "interesting",
+         "rank": 1,
+         "score": "9.5/10",
+         "barrio": "...",
+         "direccion": "...",
+         "precio": 164000,
+         "m2": 67,
+         "ambientes": 2,
+         "precio_m2": 2448,
+         "diff_vs_prom": -31,
+         "comentario": "Descripción de Claude...",
+         "link": "https://www.zonaprop.com.ar/...",
+         "fotos": ["hires/0042_01.jpg", "hires/0042_02.jpg"]
+       }
+     ]
+   }
+   ```
+2. Las fotos apuntan a los archivos en `hires/` descargados en Paso 5. El script los embebe como base64 en el HTML.
+3. Guardar el JSON como `report_input.json` y ejecutar:
+   ```bash
+   python3 <skill-path>/scripts/make_html_report.py report_input.json outputs/top_propiedades.html
+   ```
+4. Informar al usuario la ruta del HTML generado para que lo abra en el browser.
 
 ## Notas importantes
 
