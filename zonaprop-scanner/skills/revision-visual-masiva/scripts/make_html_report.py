@@ -127,7 +127,10 @@ def predownload_photos(props):
     total = len(url_map)
     print(f"Descargando {total} fotos del CDN...")
 
+    MIN_PHOTO_BYTES = 5 * 1024  # Skip images < 5KB (realtor logos/branding)
+
     results = {}
+    skipped = 0
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(download_url, url): url for url in url_map}
         done = 0
@@ -135,19 +138,25 @@ def predownload_photos(props):
             url = futures[future]
             data = future.result()
             done += 1
-            if data:
+            if data and len(data) >= MIN_PHOTO_BYTES:
                 b64 = base64.b64encode(data).decode("ascii")
                 results[url] = f"data:image/jpeg;base64,{b64}"
+            elif data:
+                skipped += 1
             if done % 20 == 0 or done == total:
                 print(f"  {done}/{total} descargadas")
 
-    # Replace URLs with data URIs in props
+    # Replace URLs with data URIs in props, remove logos/tiny images
     for url, data_uri in results.items():
         for pi, fi in url_map[url]:
             props[pi]["fotos"][fi] = data_uri
 
+    # Remove entries that weren't replaced (failed downloads or logos)
+    for pi, p in enumerate(props):
+        p["fotos"] = [f for f in p.get("fotos", []) if f.startswith("data:")]
+
     ok = len(results)
-    print(f"  {ok}/{total} fotos embebidas OK")
+    print(f"  {ok}/{total} fotos embebidas OK ({skipped} logos filtrados)")
 
 
 def score_class(score_str):
