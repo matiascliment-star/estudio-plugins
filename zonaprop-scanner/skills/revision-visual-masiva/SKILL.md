@@ -18,18 +18,21 @@ Cuando el usuario quiere revisar visualmente TODAS las propiedades de su base de
 
 ## Flujo completo
 
-### Paso 1: Obtener datos con zonaprop_bulk_export
+### Paso 1: Obtener datos con zonaprop_bulk_export (PAGINADO)
 
-Llamar al tool MCP `zonaprop_bulk_export` para obtener TODAS las propiedades. Este tool:
-- Pagina automáticamente en Supabase (de a 1000)
-- Deduplica por link
-- Devuelve JSON con todos los datos: id, link, imagen, imagenes, barrio, direccion, precio, moneda, m2, precio_m2, ambientes, dormitorios, banos, cochera, diff_vs_prom_general
-- NO descarga fotos (solo URLs)
-- No tiene límite de resultados
+El tool `zonaprop_bulk_export` devuelve propiedades **paginadas** (default 50 por página, max 100).
+
+Iterar todas las páginas así:
+1. Llamar `zonaprop_bulk_export` con `page=1, page_size=100`
+2. La respuesta incluye `total`, `page`, `total_pages`, `propiedades`
+3. Si `page < total_pages`, seguir llamando con `page=2`, `page=3`, etc.
+4. Concatenar todas las `propiedades` de cada página en un solo array
+
+Devuelve JSON con: id, link, imagen, **imagenes** (array de TODAS las URLs de fotos, hasta 8), barrio, direccion, precio, moneda, m2, precio_m2, ambientes, dormitorios, banos, cochera, diff_vs_prom_general.
 
 Parámetros opcionales de filtro: barrio, precio_min, precio_max, m2_min, m2_max, ambientes, solo_con_imagen.
 
-Guardar el JSON resultado en un archivo temporal (ej: `/tmp/propiedades.json`).
+Guardar el array completo de propiedades en `/tmp/propiedades.json`.
 
 ### Paso 2: Descargar TODAS las fotos
 
@@ -70,15 +73,17 @@ Para las propiedades finalistas (~20-30):
 1. Obtener sus datos completos del JSON de metadata, incluyendo el campo `imagenes` (array de URLs de todas las fotos)
 2. Para cada candidata, armar las URLs en alta resolución: reemplazar `/360x266/` por `/730x532/` en cada URL del array `imagenes`
 3. Ver 2-3 fotos en alta resolución con Read para evaluar detalles (terminaciones, humedad, red flags)
-4. **Guardar TODAS las URLs hires** (no solo las que se vieron) — se usan en el Paso 7 para el HTML report
+4. **CRÍTICO: Guardar TODAS las URLs hires del array `imagenes`** (las 6-8 fotos, no solo las 2-3 que miraste). Se usan OBLIGATORIAMENTE en el Paso 7 para el HTML report
 
 ### Paso 6: Ranking final
 
 Top 3, Top 10, Interesantes. Incluir links de ZonaProp.
 
-### Paso 7: Generar HTML report
+### Paso 7: Generar HTML report CON TODAS LAS FOTOS
 
 Después del ranking, generar un HTML interactivo con fotos embebidas usando `scripts/make_html_report.py`.
+
+**⚠️ OBLIGATORIO: Cada propiedad DEBE incluir TODAS sus fotos (6-8 URLs del array `imagenes`). El HTML sin fotos es INÚTIL.**
 
 1. Armar un JSON con la estructura que espera el script:
    ```json
@@ -103,17 +108,25 @@ Después del ranking, generar un HTML interactivo con fotos embebidas usando `sc
          "diff_vs_prom": -31,
          "comentario": "Descripción de Claude...",
          "link": "https://www.zonaprop.com.ar/...",
-         "fotos": ["https://imgar.zonapropcdn.com/avisos/1/00/58/53/68/28/730x532/foto1.jpg", "https://...foto2.jpg", "...hasta 8 fotos"]
+         "fotos": ["url1.jpg", "url2.jpg", "url3.jpg", "url4.jpg", "url5.jpg", "url6.jpg", "url7.jpg", "url8.jpg"]
        }
      ]
    }
    ```
-2. Las fotos pueden ser URLs del CDN de ZonaProp (el script las descarga en paralelo) o paths locales. Incluir TODAS las fotos de cada propiedad (hasta 8), no solo las que Claude revisó visualmente. El script las embebe como base64 en el HTML.
-3. Guardar el JSON como `report_input.json` y ejecutar:
+
+2. **CÓMO ARMAR EL ARRAY `fotos`:** Para cada propiedad seleccionada, buscar en el JSON de metadata (`/tmp/propiedades.json`) la propiedad por su `id` o `link`, y copiar TODAS las URLs del campo `imagenes`. Reemplazar `/360x266/` por `/730x532/` en cada URL para alta resolución. Ejemplo:
+   ```python
+   fotos = [url.replace("/360x266/", "/730x532/") for url in prop["imagenes"]]
+   ```
+   Esto genera 6-8 fotos por propiedad. NUNCA poner un array vacío o con menos de las que hay disponibles.
+
+3. El script descarga las fotos del CDN en paralelo y las embebe como base64 en el HTML. Las fotos aparecen en un carrusel horizontal scrolleable en cada card.
+
+4. Guardar el JSON como `report_input.json` y ejecutar:
    ```bash
    python3 <skill-path>/scripts/make_html_report.py report_input.json outputs/top_propiedades.html
    ```
-4. Informar al usuario la ruta del HTML generado para que lo abra en el browser.
+5. Informar al usuario la ruta del HTML generado para que lo abra en el browser.
 
 ## Notas importantes
 
