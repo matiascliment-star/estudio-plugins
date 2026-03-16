@@ -27,13 +27,18 @@ input.json: JSON con estructura:
   ]
 }
 
-Las fotos pueden ser rutas locales (se embeben como base64) o URLs data: ya codificadas.
+Las fotos pueden ser:
+- Rutas locales (se leen y embeben como base64)
+- URLs http/https del CDN de ZonaProp (se descargan y embeben como base64)
+- URLs data: ya codificadas (se usan tal cual)
 """
 import base64
 import json
 import mimetypes
 import os
 import sys
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 CSS = """\
@@ -80,16 +85,69 @@ TIER_LABELS = {
 }
 
 
+def download_url(url):
+    """Download a URL and return bytes, or None on failure."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read()
+    except Exception:
+        return None
+
+
 def encode_photo(path):
-    """Encode a local file as a data URI, or return as-is if already a data URI."""
+    """Encode a photo as a data URI. Accepts local paths, http URLs, or data: URIs."""
     if path.startswith("data:"):
         return path
+    if path.startswith("http://") or path.startswith("https://"):
+        data = download_url(path)
+        if not data:
+            return ""
+        b64 = base64.b64encode(data).decode("ascii")
+        return f"data:image/jpeg;base64,{b64}"
     if not os.path.isfile(path):
         return ""
     mime = mimetypes.guess_type(path)[0] or "image/jpeg"
     with open(path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("ascii")
     return f"data:{mime};base64,{b64}"
+
+
+def predownload_photos(props):
+    """Pre-download all HTTP photos in parallel. Mutates props in-place, replacing URLs with data URIs."""
+    url_map = {}  # url -> list of (prop_idx, foto_idx)
+    for pi, p in enumerate(props):
+        for fi, foto in enumerate(p.get("fotos", [])):
+            if foto.startswith("http://") or foto.startswith("https://"):
+                url_map.setdefault(foto, []).append((pi, fi))
+
+    if not url_map:
+        return
+
+    total = len(url_map)
+    print(f"Descargando {total} fotos del CDN...")
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(download_url, url): url for url in url_map}
+        done = 0
+        for future in as_completed(futures):
+            url = futures[future]
+            data = future.result()
+            done += 1
+            if data:
+                b64 = base64.b64encode(data).decode("ascii")
+                results[url] = f"data:image/jpeg;base64,{b64}"
+            if done % 20 == 0 or done == total:
+                print(f"  {done}/{total} descargadas")
+
+    # Replace URLs with data URIs in props
+    for url, data_uri in results.items():
+        for pi, fi in url_map[url]:
+            props[pi]["fotos"][fi] = data_uri
+
+    ok = len(results)
+    print(f"  {ok}/{total} fotos embebidas OK")
 
 
 def score_class(score_str):
@@ -188,6 +246,9 @@ def build_card(prop):
 def build_html(data):
     stats = data.get("stats", {})
     props = data.get("propiedades", [])
+
+    # Pre-download all HTTP photos in parallel
+    predownload_photos(props)
 
     # Header stats
     stat_items = [

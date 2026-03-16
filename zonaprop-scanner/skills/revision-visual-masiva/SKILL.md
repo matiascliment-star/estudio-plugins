@@ -51,17 +51,11 @@ Recorrer TODAS las grillas con Read. Ver TODAS, no saltear ninguna.
 
 ### Paso 5: Profundizar en las candidatas
 
-Para las propiedades que pasaron el filtro visual (típicamente 10-20):
-1. Obtener sus datos completos del JSON de metadata
-2. Crear una carpeta `hires/` en el directorio de trabajo
-3. Descargar 2-3 fotos en mayor resolución (reemplazar `/360x266/` por `/730x532/` en la URL)
-4. **Guardar las fotos en `hires/` con nombres vinculados a cada propiedad**: `{idx:04d}_01.jpg`, `{idx:04d}_02.jpg`, etc. donde `idx` es el índice original de la propiedad en el metadata.json
-5. Ver cada foto con Read y evaluar:
-   - Estado general y mantenimiento
-   - Calidad de terminaciones (pisos, cocina, baños)
-   - Luminosidad
-   - Red flags (humedad, grietas, renders truchos vs fotos reales)
-   - Si el precio parece acorde a lo que se ve
+Para las propiedades que pasaron el filtro visual (típicamente 20-30):
+1. Obtener sus datos completos del JSON de metadata, incluyendo el campo `imagenes` (array de URLs de todas las fotos)
+2. Para cada candidata, armar las URLs en alta resolución de TODAS sus fotos (hasta 8): reemplazar `/360x266/` por `/730x532/` en cada URL del array `imagenes`
+3. Ver 2-3 fotos con Read para evaluar (estado, terminaciones, luminosidad, red flags)
+4. **Guardar TODAS las URLs hires** (no solo las que se vieron) — se usan en el Paso 7 para el HTML report
 
 ### Paso 6: Ranking final
 
@@ -94,12 +88,12 @@ Después del ranking, generar un HTML interactivo con fotos embebidas usando `sc
          "diff_vs_prom": -31,
          "comentario": "Descripción de Claude...",
          "link": "https://www.zonaprop.com.ar/...",
-         "fotos": ["hires/0042_01.jpg", "hires/0042_02.jpg"]
+         "fotos": ["https://imgar.zonapropcdn.com/avisos/1/00/58/53/68/28/730x532/foto1.jpg", "https://...foto2.jpg", "...hasta 8 fotos"]
        }
      ]
    }
    ```
-2. Las fotos apuntan a los archivos en `hires/` descargados en Paso 5. El script los embebe como base64 en el HTML.
+2. Las fotos pueden ser URLs del CDN de ZonaProp (el script las descarga en paralelo) o paths locales. Incluir TODAS las fotos de cada propiedad (hasta 8), no solo las que Claude revisó visualmente. El script las embebe como base64 en el HTML.
 3. Guardar el JSON como `report_input.json` y ejecutar:
    ```bash
    python3 <skill-path>/scripts/make_html_report.py report_input.json outputs/top_propiedades.html
