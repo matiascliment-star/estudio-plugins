@@ -127,10 +127,9 @@ def predownload_photos(props):
     total = len(url_map)
     print(f"Descargando {total} fotos del CDN...")
 
-    MIN_PHOTO_BYTES = 5 * 1024  # Skip images < 5KB (realtor logos/branding)
+    LOGO_THRESHOLD = 5 * 1024  # Images < 5KB are realtor logos
 
-    results = {}
-    skipped = 0
+    results = {}  # url -> (data_uri, size_bytes)
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(download_url, url): url for url in url_map}
         done = 0
@@ -138,25 +137,43 @@ def predownload_photos(props):
             url = futures[future]
             data = future.result()
             done += 1
-            if data and len(data) >= MIN_PHOTO_BYTES:
+            if data:
                 b64 = base64.b64encode(data).decode("ascii")
-                results[url] = f"data:image/jpeg;base64,{b64}"
-            elif data:
-                skipped += 1
+                results[url] = (f"data:image/jpeg;base64,{b64}", len(data))
             if done % 20 == 0 or done == total:
                 print(f"  {done}/{total} descargadas")
 
-    # Replace URLs with data URIs in props, remove logos/tiny images
-    for url, data_uri in results.items():
+    # Replace URLs with data URIs in props
+    for url, (data_uri, _size) in results.items():
         for pi, fi in url_map[url]:
             props[pi]["fotos"][fi] = data_uri
 
-    # Remove entries that weren't replaced (failed downloads or logos)
+    # For each prop: remove failed downloads, then move logos (< 5KB) to the end
+    logos_moved = 0
     for pi, p in enumerate(props):
-        p["fotos"] = [f for f in p.get("fotos", []) if f.startswith("data:")]
+        embedded = []
+        logos = []
+        for fi, foto in enumerate(p.get("fotos", [])):
+            if not foto.startswith("data:"):
+                continue  # failed download
+            # Find original URL to check size
+            orig_url = None
+            for url, locs in url_map.items():
+                for loc_pi, loc_fi in locs:
+                    if loc_pi == pi and loc_fi == fi:
+                        orig_url = url
+                        break
+            size = results.get(orig_url, (None, 0))[1] if orig_url else 999999
+            if size < LOGO_THRESHOLD:
+                logos.append(foto)
+            else:
+                embedded.append(foto)
+        if logos:
+            logos_moved += len(logos)
+        p["fotos"] = embedded + logos  # real photos first, logos at the end
 
     ok = len(results)
-    print(f"  {ok}/{total} fotos embebidas OK ({skipped} logos filtrados)")
+    print(f"  {ok}/{total} fotos embebidas OK ({logos_moved} logos movidos al final)")
 
 
 def score_class(score_str):

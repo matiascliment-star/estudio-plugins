@@ -32,20 +32,14 @@ def get_all_urls(prop):
     return []
 
 
-MIN_PHOTO_BYTES = 5 * 1024  # Skip images < 5KB (realtor logos/branding)
-
-
 def download_one(fname, url):
-    """Descarga una foto. Retorna (fname, success). Descarta logos < 5KB."""
-    if os.path.exists(fname) and os.path.getsize(fname) >= MIN_PHOTO_BYTES:
+    """Descarga una foto. Retorna (fname, success)."""
+    if os.path.exists(fname) and os.path.getsize(fname) > 100:
         return fname, True
     if not url or not url.startswith("http"):
         return fname, False
     try:
         urllib.request.urlretrieve(url, fname)
-        if os.path.getsize(fname) < MIN_PHOTO_BYTES:
-            os.remove(fname)
-            return fname, False
         return fname, True
     except Exception:
         return fname, False
