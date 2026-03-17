@@ -96,11 +96,11 @@ Ahí sí usar la función `texto_a_html_scba()` estándar. Pero si el usuario in
 
 ## Credenciales
 
-Las credenciales de la SCBA están en el archivo `.env` de la carpeta del usuario:
+Las credenciales de la SCBA están en el archivo `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`):
 - `MEV_USUARIO`: email de notificaciones SCBA (ej: `20313806198@notificaciones.scba.gov.ar`)
 - `MEV_PASSWORD`: contraseña de notificaciones SCBA
 
-Leer `.env` antes de hacer cualquier operación. Si no hay credenciales, pedirlas al usuario.
+**IMPORTANTE**: Siempre leer `~/.env` usando el path absoluto `/Users/matiaschristiangarciacliment/.env` (NO buscar `.env` en el directorio de trabajo actual, ya que puede variar). Si no hay credenciales en ese archivo, pedirlas al usuario.
 
 ## Conversión del escrito a HTML
 
@@ -275,7 +275,7 @@ Si el script o las tools MCP no están disponibles, informar al usuario que el s
 
 ## Instrucciones para el agente
 
-1. Leer `.env` para obtener `MEV_USUARIO` y `MEV_PASSWORD`
+1. Leer `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`) para obtener `MEV_USUARIO` y `MEV_PASSWORD`
 2. Confirmar con el usuario: causa (número o carátula), tipo de presentación, y contenido
 3. Obtener `id_org` e `id_causa` (si no los tenés, usar la **tool MCP** `mev_listar_causas`)
 4. Convertir el escrito a HTML **preservando el formato exacto del original**:

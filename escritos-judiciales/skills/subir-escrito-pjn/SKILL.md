@@ -69,31 +69,31 @@ Ahí sí usar reportlab con el template estándar (ver sección más abajo). Per
 1. **Leer el Word** para extraer: número de expediente, título/sumario, tipo de escrito
 2. **Convertir a PDF con libreoffice** (`libreoffice --headless --convert-to pdf --outdir /tmp "archivo.docx"`) — esto preserva TODO el formato original (negritas, subrayados, colores, tablas, etc.)
 3. **NUNCA usar reportlab para convertir Word** — pierde el formato
-4. **Leer `.env`** para credenciales PJN
+4. **Leer `~/.env`** para credenciales PJN (path absoluto: `/Users/matiaschristiangarciacliment/.env`)
 5. **Ejecutar el script de upload** con los datos extraídos
 6. **Informar resultado** al usuario
 
 ### Si el usuario sube un PDF ya hecho:
 1. **Leer el PDF** para extraer: número de expediente, título/sumario, tipo de escrito
 2. **Copiar el PDF a /tmp** si no está ahí — NO reconvertirlo ni modificarlo
-3. **Leer `.env`** para credenciales PJN
+3. **Leer `~/.env`** para credenciales PJN (path absoluto: `/Users/matiaschristiangarciacliment/.env`)
 4. **Ejecutar el script de upload** directamente con los datos extraídos
 5. **Informar resultado** al usuario
 
 ### Si el usuario da texto plano para convertir a PDF:
 1. **Extraer** del texto: número de expediente, título/sumario, tipo de escrito
 2. **Generar PDF** con reportlab y guardar en `/tmp/escrito_pjn.pdf`
-3. **Leer `.env`** para credenciales PJN
+3. **Leer `~/.env`** para credenciales PJN (path absoluto: `/Users/matiaschristiangarciacliment/.env`)
 4. **Ejecutar el script de upload** con los datos extraídos
 5. **Informar resultado** al usuario
 
 ## Credenciales
 
-Las credenciales del PJN están en el archivo `.env` de la carpeta del usuario:
+Las credenciales del PJN están en el archivo `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`):
 - `PJN_USUARIO`: CUIT sin guiones (ej: `20313806198`)
 - `PJN_PASSWORD`: contraseña del PJN
 
-Leer `.env` antes de hacer cualquier operación. Si no hay credenciales, pedirlas al usuario.
+**IMPORTANTE**: Siempre leer `~/.env` usando el path absoluto `/Users/matiaschristiangarciacliment/.env` (NO buscar `.env` en el directorio de trabajo actual, ya que puede variar). Si no hay credenciales en ese archivo, pedirlas al usuario.
 
 ## Conversión del escrito a PDF
 
@@ -190,7 +190,7 @@ El formato es: `JURISDICCION NUMERO/AÑO`. Ejemplos:
 
 ## Instrucciones para el agente (resumen)
 
-1. Leer `.env` → `PJN_USUARIO` y `PJN_PASSWORD`
+1. Leer `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`) → `PJN_USUARIO` y `PJN_PASSWORD`
 2. Determinar el formato del archivo de entrada:
    - **Word (.docx)** → Convertir a PDF con `libreoffice --headless --convert-to pdf` (preserva formato exacto). **NUNCA usar reportlab para Word.**
    - **PDF** → Usarlo tal cual, sin reconvertir
