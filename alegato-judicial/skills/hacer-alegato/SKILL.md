@@ -66,7 +66,7 @@ El alegato necesita TODA la prueba producida. Hay que leer el maximo posible de 
    - Demanda / escrito de inicio
    - Contestacion de demanda
    - Pericias medicas (y sus impugnaciones/aclaraciones)
-   - Pericias contables
+   - Pericias contables Y nuestras observaciones/impugnaciones a la contable (buscar en movimientos: "observa pericia contable", "impugna pericia contable", "contesta traslado pericia contable")
    - Pericias psicologicas
    - Informes periciales de cualquier tipo
    - Prueba testimonial (actas de audiencia)
@@ -259,7 +259,7 @@ Para SCBA:
 - Titulo: "PARTE ACTORA PRESENTA ALEGATO"
 - texto_html: el HTML del alegato
 
-**IMPORTANTE:** NUNCA guardar borrador sin que el usuario lo pida explicitamente.
+**IMPORTANTE — REGLA ABSOLUTA:** NUNCA guardar borrador, subir escrito, ni llamar a `pjn_guardar_borrador`, `pjn_enviar_borrador`, `pjn_presentar_escrito`, `scba_guardar_borrador` o cualquier tool de guardado/envio sin que el usuario lo pida EXPLICITAMENTE. Primero mostrar el alegato completo, esperar aprobacion, y solo guardar/subir si el usuario dice expresamente "guardalo", "subilo", etc.
 
 ## Reglas de redaccion
 
@@ -269,14 +269,34 @@ Para SCBA:
 4. **Jurisprudencia**: Incluir jurisprudencia relevante. Consultar `references/jurisprudencia-comun.md` y si es necesario buscar jurisprudencia adicional con `csjn_buscar_por_palabra_clave`.
 5. **Ser exhaustivo** — El alegato debe cubrir TODA la prueba. Si hay 5 testigos, mencionar los 5. Si hay 3 pericias, analizar las 3.
 6. **Mantener impugnaciones** — Si en el expediente se impugnaron pericias y esas impugnaciones no fueron cabalmente respondidas, MANTENER los puntos en el alegato y pedir al tribunal que los tenga presentes al resolver.
-7. **Calculos subsidiarios** — Si hay diferencias entre lo que dice la pericia y lo que esta parte reclama (por impugnaciones), incluir un calculo subsidiario con el numero que pretendemos.
-8. **Ampliar si hay mas prueba** — El modelo es una base. Si el caso tiene prueba que el modelo no contempla (ej: pericia contable, testimonial, informativa), AMPLIAR el alegato con secciones adicionales. No limitarse al modelo.
-9. **No inventar hechos** — Solo alegar sobre prueba que efectivamente fue producida y consta en el expediente.
-10. **Valorar la prueba** — No solo transcribir, sino ARGUMENTAR por que la prueba favorece a nuestra parte. Usar reglas de la sana critica (art. 386 CPCCN).
+7. **Pericia contable + nuestras observaciones** — SIEMPRE leer la pericia contable Y las observaciones/impugnaciones que hicimos a la contable. Si en nuestra observacion propusimos un calculo distinto (ej: otro IBM, otro salario, otras diferencias), en el alegato el calculo NUESTRO va como **principal** y el de la pericia como subsidiario. Ejemplo: "El IBM asciende a $X (conforme la observacion de esta parte de fecha [fecha], que no fue satisfactoriamente respondida por el perito). Subsidiariamente, y para el caso de que V.S. no admita la observacion, el IBM conforme la pericia es de $Y."
+8. **Calculos subsidiarios en pericias medicas** — Si hay diferencias entre lo que dice la pericia medica y lo que esta parte reclama (por impugnaciones), incluir un calculo subsidiario con el numero que pretendemos.
+9. **Ampliar si hay mas prueba** — El modelo es una base. Si el caso tiene prueba que el modelo no contempla (ej: pericia contable, testimonial, informativa), AMPLIAR el alegato con secciones adicionales. No limitarse al modelo.
+10. **No inventar hechos** — Solo alegar sobre prueba que efectivamente fue producida y consta en el expediente.
+11. **Valorar la prueba** — No solo transcribir, sino ARGUMENTAR por que la prueba favorece a nuestra parte. Usar reglas de la sana critica (art. 386 CPCCN).
+12. **Factor edad con jurisprudencia** — Cuando se alegue sobre factores de ponderacion y el factor edad, SIEMPRE incluir jurisprudencia que avale la adicion aritmetica directa. Consultar `references/jurisprudencia-comun.md` seccion FACTOR EDAD.
 
-## Instrucciones para generar el DOCX
+## Reglas de formato OBLIGATORIAS
 
-Generar el alegato como archivo Word (.docx) usando python-docx. Los titulos de seccion (I.- OBJETO, II.- ANTECEDENTES, etc.) deben ir **subrayados y en negrita**.
+**CRITICO — Respetar SIEMPRE, tanto en DOCX como en HTML:**
+
+1. **Titulos de seccion SIEMPRE subrayados y en negrita** — Los titulos (I.- OBJETO, II.- ANTECEDENTES, III.- LA INCAPACIDAD DEL TRABAJADOR, etc.) SIEMPRE llevan subrayado (`<u>` en HTML, `underline=True` en DOCX) Y negrita. NUNCA generar un titulo de seccion sin subrayado.
+2. **Alineacion a la IZQUIERDA** — Todo el texto (titulos y cuerpo) alineado a la izquierda. NO usar justificado, NO usar centrado.
+3. **Fuente**: Times New Roman 12pt.
+
+## Formato segun jurisdiccion
+
+**Para SCBA (Provincia de Buenos Aires): SIEMPRE generar en HTML.**
+- El escrito se genera como HTML y se sube via `scba_guardar_borrador` con el HTML en `texto_html`.
+- Titulos en HTML: `<p style="text-align: left;"><strong><u>I.- OBJETO</u></strong></p>`
+- Cuerpo: `<p style="text-align: left;">[texto]</p>`
+- NUNCA generar DOCX para causas de provincia. SIEMPRE HTML.
+
+**Para PJN (CABA / Nacional): generar DOCX.**
+
+## Instrucciones para generar el DOCX (solo PJN)
+
+Generar el alegato como archivo Word (.docx) usando python-docx. Los titulos de seccion SIEMPRE **subrayados y en negrita**, alineados a la izquierda.
 
 ```python
 from docx import Document
@@ -298,11 +318,12 @@ def crear_docx_alegato(secciones, titulo_principal, output_path):
         section.left_margin = Cm(3)
         section.right_margin = Cm(2)
 
-    # Titulo principal (centrado, negrita)
+    # Titulo principal (IZQUIERDA, negrita, subrayado)
     p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     run = p.add_run(titulo_principal.upper())
     run.bold = True
+    run.underline = True
     run.font.size = Pt(12)
     run.font.name = 'Times New Roman'
 
@@ -310,9 +331,9 @@ def crear_docx_alegato(secciones, titulo_principal, output_path):
 
     for titulo_seccion, texto in secciones:
         if titulo_seccion:
-            # Titulo de seccion: negrita + subrayado
+            # Titulo de seccion: negrita + subrayado + IZQUIERDA
             p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
             run = p.add_run(titulo_seccion)
             run.bold = True
             run.underline = True
@@ -324,7 +345,7 @@ def crear_docx_alegato(secciones, titulo_principal, output_path):
             parrafo = parrafo.strip()
             if parrafo:
                 p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 run = p.add_run(parrafo)
                 run.font.size = Pt(12)
                 run.font.name = 'Times New Roman'
@@ -341,6 +362,21 @@ Alternativa si python-docx falla: generar un HTML y convertir con textutil:
 ```bash
 textutil -convert docx /tmp/alegato.html -output /tmp/alegato.docx
 ```
+
+## Instrucciones para generar HTML (solo SCBA/Provincia)
+
+Para causas de Provincia de Buenos Aires, SIEMPRE generar HTML:
+
+```html
+<p style="text-align: left;"><strong><u>PARTE ACTORA PRESENTA ALEGATO</u></strong></p>
+<p style="text-align: left;">[Encabezado con datos del letrado y expediente]</p>
+<p style="text-align: left;"><strong><u>I.- OBJETO</u></strong></p>
+<p style="text-align: left;">[Texto del objeto]</p>
+<p style="text-align: left;"><strong><u>II.- ANTECEDENTES</u></strong></p>
+<p style="text-align: left;">[Texto de antecedentes]</p>
+```
+
+Titulos: `<strong><u>TITULO</u></strong>` — SIEMPRE con `<u>`. Parrafos: `<p style="text-align: left;">`.
 
 ## Notas importantes
 

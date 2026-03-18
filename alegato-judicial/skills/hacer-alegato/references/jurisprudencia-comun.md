@@ -89,6 +89,46 @@ Fecha de sentencia: 15/07/2020
 
 SCBA, "Barrios", C. 124.096: Declaro la inconstitucionalidad sobrevenida del art. 7 de la ley 23.928 (t.o. por art. 4 de la ley 25.561) y ordeno la actualizacion del monto indemnizatorio por un indice que refleje la real perdida del poder adquisitivo de la moneda (IPC-INDEC o el que el tribunal estime adecuado), desde la fecha de determinacion del IBM hasta el efectivo pago.
 
+## 5. FACTOR EDAD — ADICION ARITMETICA DIRECTA
+
+**SIEMPRE incluir esta jurisprudencia cuando se alegue sobre factor edad.**
+
+El factor de ponderacion segun la edad se suma de forma ARITMETICA DIRECTA (1% por cada ano que exceda los 30 anos), a diferencia de los demas factores que se calculan como porcentaje de la incapacidad. Criterio unanime de la CNAT:
+
+"Sostiene que el Sr. juez 'a quo' adiciono el porcentual resultante del 2% de la incapacidad determinada, cuando conforme la operatoria establecida en el Baremo del decreto 659/96 corresponde sumarlo directamente. Estimo que el agravio debe prosperar. En efecto, sabido es que, a diferencia de los restantes factores de ponderacion, el factor edad se suma de manera directa a la incapacidad que padece el actor."
+Tribunal: CNAT, SALA II
+Expediente: CNT 008335/2017
+Caratula: TRONCOSO LAURA, FRANCISCO C/ OMINT ART S.A. S/ACCIDENTE - LEY ESPECIAL
+Fecha: 01/09/2021
+
+"En efecto, sabido es que a diferencia de los restantes factores de ponderacion, el factor edad se suma de manera directa a la incapacidad que padece el accionante"
+Tribunal: CNAT, SALA II
+Expediente: 9242/2014
+Caratula: FLORES, RAMON EDUARDO C/ PROVINCIA ASEGURADORA DE RIESGOS DEL TRABAJO S.A. S/ACCIDENTE-LEY ESPECIAL
+Fecha: 01/11/2017
+
+"Respecto al factor de ponderacion correspondiente a la edad, comparto la doctrina que sostiene que este factor se incorpora a la incapacidad funcional sumandose en forma directa"
+Tribunal: CNAT, SALA III
+Expediente: 32981/2014
+Caratula: CONTRERAS EZEQUIEL ISIDORO C/ GALENO ASEGURADORA DE RIESGOS DEL TRABAJO S.A. S/ ACCIDENTE-LEY ESPECIAL
+Fecha: 20/02/2018
+
+"Luego, se agravia por el factor de ponderacion correspondiente a la edad (1%) y senala que debe adicionarse aritmeticamente. Sostiene que hubo un error para su calculo. Adelanto, que le asiste razon en este punto materia de agravio. En efecto, tal como senala el apelante la incapacidad total que padece el actor, adicionandole aritmeticamente el factor de ponderacion correspondiente a la edad (1%), es de 7.60%"
+Tribunal: CNAT, SALA VII
+Expediente: 73939/2015
+Caratula: MIRANDA DARIO EDUARDO C/ GALENO ASEGURADORA DE RIESGOS DEL TRABAJO S.A. S/ ACCIDENTE - LEY ESPECIAL
+Fecha: 28/03/2018
+
+## 6. DIFICULTAD INTERMEDIA — RANGO 11% A 15%
+
+**Incluir cuando el perito asigno 10% por dificultad intermedia (que es incorrecto, porque 10% es el tope de leve).**
+
+"En relacion al calculo del factor de ponderacion por dificultad 'intermedia' para realizar tareas habituales, el perito determino el 10%, lo cual no se ajusta al Decreto 659/96, toda vez que por la dificultad intermedia corresponde a un valor que oscila desde 11,00% hasta 15,00%, motivo por el cual corresponde modificarlo."
+Tribunal: CAMARA NACIONAL DE APELACIONES DEL TRABAJO - SALA VIII
+Expediente: CNT 45069/2022
+Caratula: CANTERO, MAXIMILIANO c/ PREVENCION ART S.A. s/ RECURSO LEY 27348
+Fecha: 15/03/2024
+
 ## NOTA
 
 Esta jurisprudencia es SOLO la verificada de escritos reales del estudio. Para cada caso particular, si se necesita jurisprudencia adicional sobre un tema especifico, buscarla con la tool `csjn_buscar_por_palabra_clave` y verificar descargando el fallo con `csjn_descargar_fallo`. NUNCA inventar citas de jurisprudencia.

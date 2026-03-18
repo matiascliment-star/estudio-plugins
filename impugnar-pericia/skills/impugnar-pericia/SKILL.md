@@ -265,7 +265,15 @@ Algunos modelos tienen citas de jurisprudencia con la referencia del caso entre 
 
 **Formato segun jurisdiccion:**
 - PJN: generar PDF (texto plano formateado)
-- SCBA: generar HTML (para el campo texto_html del borrador)
+- SCBA: SIEMPRE generar HTML (para el campo texto_html del borrador). NUNCA generar PDF para provincia.
+
+**Reglas de formato OBLIGATORIAS (tanto en PDF como en HTML):**
+1. **Titulos SIEMPRE subrayados y en negrita** — Los titulos (I. OBJETO, II. FUNDAMENTOS, OBSERVACION N° 1, etc.) SIEMPRE llevan subrayado Y negrita. En HTML: `<strong><u>titulo</u></strong>`. NUNCA generar un titulo sin subrayado.
+2. **Alineacion a la IZQUIERDA** — Todo el texto alineado a la izquierda. NO usar justificado, NO usar centrado.
+3. En HTML para SCBA: titulos con `<p style="text-align: left;"><strong><u>TITULO</u></strong></p>`, parrafos con `<p style="text-align: left;">[texto]</p>`.
+
+**Factor edad — SIEMPRE incluir jurisprudencia:**
+Cuando se impugne el factor edad, SIEMPRE copiar las citas de jurisprudencia del modelo en `references/modelos-impugnacion.md` seccion "factores edad de forma directa". NO omitir los fallos citados — son fundamentales para que el juez acepte la observacion.
 
 ### FASE 7: Mostrar escrito y esperar aprobacion
 
@@ -300,7 +308,7 @@ Parametros:
   - titulo: "IMPUGNA PERICIA MEDICA"
 ```
 
-**PROHIBIDO:** Nunca usar `pjn_presentar_escrito` ni `pjn_enviar_borrador` sin confirmacion EXPLICITA del usuario. Nunca guardar borrador sin que el usuario haya visto el escrito y dicho que lo guarde.
+**PROHIBIDO — REGLA ABSOLUTA:** NUNCA llamar a `pjn_guardar_borrador`, `pjn_presentar_escrito`, `pjn_enviar_borrador`, `scba_guardar_borrador` ni ninguna tool de guardado/envio sin que el usuario haya visto el escrito completo y dicho EXPRESAMENTE que lo guarde ("guardalo", "subilo", "dale"). Si el usuario no dice nada sobre guardarlo, NO guardarlo. Primero mostrar, esperar, y solo actuar si lo pide.
 
 ## Instrucciones para generar el PDF
 

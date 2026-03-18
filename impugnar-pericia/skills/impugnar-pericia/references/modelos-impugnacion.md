@@ -1478,7 +1478,8 @@ En función de lo expuesto, solicito se eleve a un mínimo de 15% el factor de p
 
 Idéntico criterio, y con mayor detalle, surge de la muy reciente jurisprudencia de esta Cámara de Apelaciones de este fuero.
 
-“En relación al cálculo del factor de ponderación por dificultad “intermedia” para realizar tareas habituales, el perito determino el 10%, lo cual no se ajusta al Decreto 659/96, toda vez que por la dificultad intermedia corresponde a un valor que oscila desde 11,00% hasta 15,00%, motivo por el cual corresponde modificarlo.”
+"En relación al cálculo del factor de ponderación por dificultad "intermedia" para realizar tareas habituales, el perito determino el 10%, lo cual no se ajusta al Decreto 659/96, toda vez que por la dificultad intermedia corresponde a un valor que oscila desde 11,00% hasta 15,00%, motivo por el cual corresponde modificarlo."
+(CÁMARA NACIONAL DE APELACIONES DEL TRABAJO - SALA VIII, "CANTERO, MAXIMILIANO c/ PREVENCION ART S.A. s/ RECURSO LEY 27348", Expte. CNT 45069/2022, Sentencia del 15/03/2024)
 ```
 
 ---
