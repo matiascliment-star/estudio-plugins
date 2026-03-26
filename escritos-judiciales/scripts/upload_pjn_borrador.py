@@ -112,7 +112,10 @@ def mcp_request(url, api_key, body, session_id=None):
 
 
 def initialize_session(url, api_key):
-    """Initialize MCP session and return session ID."""
+    """Initialize MCP session (stateless mode - just returns a dummy session)."""
+    # Server runs in stateless mode - no session initialization needed.
+    # Each request is independent. Try initialize for backwards compat,
+    # but don't fail if no session ID is returned.
     init_body = {
         "jsonrpc": "2.0",
         "method": "initialize",
@@ -126,19 +129,18 @@ def initialize_session(url, api_key):
 
     result, session_id = mcp_request(url, api_key, init_body)
 
-    if not session_id:
-        raise RuntimeError("No session ID returned from initialize request")
-
     if result and "error" in result:
         raise RuntimeError(f"Initialize error: {result['error']}")
 
-    notif_body = {
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized"
-    }
-    mcp_request(url, api_key, notif_body, session_id)
+    # In stateless mode, session_id may be None - that's OK
+    if session_id:
+        notif_body = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        mcp_request(url, api_key, notif_body, session_id)
 
-    return session_id
+    return session_id  # May be None in stateless mode
 
 
 def call_tool(url, api_key, session_id, tool_name, arguments):
