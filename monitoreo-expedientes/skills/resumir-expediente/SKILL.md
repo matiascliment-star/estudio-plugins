@@ -5,7 +5,7 @@ description: >
   Lee movimientos, sentencias, liquidaciones y proveidos clave del expediente, y produce un
   resumen narrativo estructurado que permite entender el estado del caso sin releer todo.
   Sirve para cualquier etapa: prueba, sentencia, ejecucion, camara, etc.
-  Tambien activa monitoreo_diario=true para que el briefing diario lo incluya.
+  Al final pregunta si se quiere agregar al monitoreo diario (briefing).
   Usar cuando el usuario pida: "resumir expediente", "hacer resumen del caso", "cargar resumen",
   "activar monitoreo", "agregar al briefing", "resumir caso", "resumen IA del expediente",
   "quiero seguir este caso", "monitorear expediente", "agregar expediente al seguimiento".
@@ -204,14 +204,17 @@ ULTIMO MOVIMIENTO: [fecha] - [descripcion]
 ```sql
 UPDATE expedientes SET
   resumen_ia = '[el resumen generado]',
-  monitoreo_diario = true,
   ultima_revision_auto = now()
 WHERE id = [expediente_id];
 ```
 
 ### Paso 5: Confirmar al usuario
 
-Mostrar el resumen generado y confirmar que se guardó. Preguntar si quiere ajustar algo.
+1. Mostrar el resumen generado
+2. Preguntar si quiere ajustar algo
+3. Preguntar: **"¿Querés agregarlo al monitoreo diario?"**
+   - Si dice sí → `UPDATE expedientes SET monitoreo_diario = true WHERE id = [id]`
+   - Si dice no → no tocar monitoreo_diario, solo queda el resumen guardado
 
 ## Reglas importantes
 
