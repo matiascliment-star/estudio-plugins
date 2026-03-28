@@ -1,0 +1,9 @@
+{
+  "name": "monitoreo-expedientes",
+  "version": "1.0.0",
+  "description": "Monitoreo diario de expedientes judiciales: resumen IA, briefing automático, seguimiento de novedades y cobros.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["monitoreo", "briefing", "expedientes", "resumen", "judicial", "seguimiento", "cobros", "novedades"]
+}
