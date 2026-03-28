@@ -273,6 +273,55 @@ Si el usuario no especifica, usar "1" (Escritos) que es el más común.
 
 Si el script o las tools MCP no están disponibles, informar al usuario que el servidor MCP no está conectado.
 
+## REGLA CRÍTICA: SANITIZAR HTML ANTES DE ENVIAR AL MCP
+
+El servidor SCBA rechaza caracteres Unicode (tildes, eñes, grados, guiones largos, etc.) con el error: *"El texto contenía caracteres inválidos"*. **SIEMPRE** sanitizar el HTML antes de pasarlo a `scba_guardar_borrador` o al script de adjuntos.
+
+### Función de sanitización (OBLIGATORIA)
+
+```python
+def sanitizar_html_scba(html):
+    """Reemplaza caracteres Unicode por entidades HTML para SCBA."""
+    reemplazos = {
+        'á': '&aacute;', 'é': '&eacute;', 'í': '&iacute;', 'ó': '&oacute;', 'ú': '&uacute;',
+        'Á': '&Aacute;', 'É': '&Eacute;', 'Í': '&Iacute;', 'Ó': '&Oacute;', 'Ú': '&Uacute;',
+        'ñ': '&ntilde;', 'Ñ': '&Ntilde;',
+        'ü': '&uuml;',   'Ü': '&Uuml;',
+        '°': '&deg;',     'º': '&ordm;',   'ª': '&ordf;',
+        '–': '&ndash;',   '—': '&mdash;',
+        '¿': '&iquest;',  '¡': '&iexcl;',
+        '«': '&laquo;',   '»': '&raquo;',
+        '\u00a0': '&nbsp;',
+    }
+    for char, entity in reemplazos.items():
+        html = html.replace(char, entity)
+    # Cualquier otro carácter fuera de ASCII imprimible → entidad numérica
+    import re
+    html = re.sub(r'[^\x20-\x7E\x0A\x0D\x09]', lambda m: f'&#{ord(m.group(0))};', html)
+    return html
+```
+
+### Cuándo aplicarla
+- **SIEMPRE**, sin excepción, sobre el HTML final antes de pasarlo como `texto_html` a `scba_guardar_borrador`
+- **SIEMPRE**, sin excepción, sobre el HTML final antes de guardarlo en archivo para `upload_scba_adjuntos.py`
+- También sanitizar el `titulo` del escrito (puede tener tildes, eñes, etc.)
+- Aplicar **después** de la conversión con mammoth/texto_a_html_scba, como último paso antes del envío
+
+### Ejemplo de uso
+```python
+import mammoth
+
+with open("documento.docx", "rb") as f:
+    result = mammoth.convert_to_html(f)
+    html = result.value
+
+# OBLIGATORIO: sanitizar antes de enviar
+html = sanitizar_html_scba(html)
+titulo = sanitizar_html_scba("CONTESTA TRASLADO – COSTAS")
+
+# Ahora sí, pasar al MCP o guardar en archivo
+```
+
 ## Instrucciones para el agente
 
 1. Leer `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`) para obtener `MEV_USUARIO` y `MEV_PASSWORD`
@@ -282,10 +331,11 @@ Si el script o las tools MCP no están disponibles, informar al usuario que el s
    - **Word (.docx)** → Usar `mammoth` para extraer HTML con formato (negritas, subrayados, colores, tablas). **NUNCA usar `texto_a_html_scba()` para Word.**
    - **PDF** → Extraer texto preservando estructura y formato, reconstruir HTML fiel al original
    - **Texto plano** → Usar `texto_a_html_scba()` estándar
-5. **Sin adjuntos**: Llamar a la tool MCP `scba_guardar_borrador` directamente
-6. **Con adjuntos**: Guardar HTML en archivo temporal + ejecutar `${CLAUDE_PLUGIN_ROOT}/scripts/upload_scba_adjuntos.py`
-7. Informar al usuario el resultado
-8. Recordar que el borrador debe firmarse digitalmente desde notificaciones.scba.gov.ar
-9. **NUNCA subir un documento con formato diferente al que el usuario aprobó**
+5. **SANITIZAR el HTML y el título** con `sanitizar_html_scba()` — este paso es OBLIGATORIO, sin excepción
+6. **Sin adjuntos**: Llamar a la tool MCP `scba_guardar_borrador` directamente
+7. **Con adjuntos**: Guardar HTML en archivo temporal + ejecutar `${CLAUDE_PLUGIN_ROOT}/scripts/upload_scba_adjuntos.py`
+8. Informar al usuario el resultado
+9. Recordar que el borrador debe firmarse digitalmente desde notificaciones.scba.gov.ar
+10. **NUNCA subir un documento con formato diferente al que el usuario aprobó**
 
 El borrador NO se presenta automáticamente — siempre queda como borrador para firma digital manual. Esto es intencional y no se puede cambiar desde la API.
