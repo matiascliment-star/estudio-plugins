@@ -61,6 +61,13 @@
       "source": "./alegato-judicial",
       "description": "Genera alegatos judiciales completos a partir de la prueba producida en el expediente",
       "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "monitoreo-expedientes",
+      "version": "1.0.0",
+      "source": "./monitoreo-expedientes",
+      "description": "Monitoreo diario de expedientes judiciales: resumen IA, briefing automático, seguimiento de novedades y cobros",
+      "author": { "name": "Matias Climent" }
     }
   ]
 }
