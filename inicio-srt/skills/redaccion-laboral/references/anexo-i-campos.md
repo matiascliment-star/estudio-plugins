@@ -33,12 +33,12 @@ Los datos se extraen de múltiples fuentes: ficha del cliente, recibo de sueldo,
 | `fecha_ocurrencia` | Fecha del accidente | Ficha |
 | `fecha_denuncia` | Fecha de denuncia (si se conoce) | Ficha / Alta médica |
 | `fecha_baja_laboral` | Fecha de baja laboral (si se conoce) | Ficha / Alta médica |
-| `detalle_accidente` | Resumen breve del accidente | Ficha |
+| `detalle_accidente` | **SIEMPRE poner "Según escrito adjunto."** | — |
 
 ### Datos médicos
 | Campo PDF | Dato | Fuente principal |
 |-----------|------|-----------------|
-| `afecciones_diagnosticos` | Diagnóstico / lesiones | Ficha + Alta médica |
+| `afecciones_diagnosticos` | **SIEMPRE poner "Según escrito adjunto."** | — |
 
 ### Datos del letrado
 | Campo PDF | Dato |
@@ -74,8 +74,35 @@ Los datos se extraen de múltiples fuentes: ficha del cliente, recibo de sueldo,
 ### Preexistencias
 | Campo PDF | Cuándo activar |
 |-----------|---------------|
-| `preexistencia_no` | **SIEMPRE** — nunca completar preexistencias |
-| `preexistencia_si` | **NUNCA** — no marcar jamás |
+| `preexistencia_no` | **NO TOCAR** — dejar toda la sección de preexistencias completamente en blanco, no marcar ningún checkbox ni completar ningún campo |
+| `preexistencia_si` | **NO TOCAR** — dejar en blanco |
+
+**IMPORTANTE**: No marcar NI "sí" NI "no" en preexistencias. Dejar la sección entera vacía/sin completar.
+
+### Fundamento de competencia (jurisdicción)
+
+Los checkboxes `fundamento_domicilio` y `fundamento_prestacion` determinan si el caso se inicia por domicilio del trabajador (del DNI) o por lugar de prestación de tareas (de la ficha/recibo).
+
+**Regla**: Comparar ambas localidades (domicilio vs lugar de trabajo) y elegir la que corresponda a la jurisdicción mejor rankeada según este orden de preferencia:
+
+| Ranking | Jurisdicción |
+|---------|-------------|
+| 1 | CABA |
+| 2 | San Isidro |
+| 3 | San Miguel |
+| 4 | Morón |
+| 5 | San Martín |
+| 6 | La Matanza |
+| 7 | Moreno |
+| 8 | La Plata |
+| 9 | Lanús |
+| 10 | Lomas de Zamora |
+
+**Cómo aplicar**:
+1. Determinar qué jurisdicción/comisión médica corresponde al domicilio del trabajador (DNI)
+2. Determinar qué jurisdicción/comisión médica corresponde al lugar de trabajo (ficha)
+3. Tildar `fundamento_domicilio` si el domicilio tiene mejor ranking, o `fundamento_prestacion` si el lugar de trabajo tiene mejor ranking
+4. Si ambas caen en la misma jurisdicción, tildar `fundamento_domicilio`
 
 ## Instrucciones para rellenar
 

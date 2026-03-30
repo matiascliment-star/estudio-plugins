@@ -20,7 +20,7 @@ Ficha: Rodilla izquierda, manos ambas, muñecas ambas, hombro derecho, tobillo i
 MANIFIESTA LESIONES – RECLAMA DAÑO FÍSICO Y PSÍQUICO.
 
 1.- Traumatismo y esguince de rodilla izquierda.
-2.- Lesión meniscal no operada con hipotrofia muscular (3) e hidrartrosis y bloqueo.
+2.- Lesión meniscal y ligamentaria no operada con hipotrofia muscular (3) e hidrartrosis y bloqueo.
 3.- Traumatismo y esguince de ambas manos.
 4.- Traumatismo y esguince de ambas muñecas.
 5.- Traumatismo y esguince de hombro derecho.
@@ -58,7 +58,7 @@ MANIFIESTA LESIONES – RECLAMA DAÑO FÍSICO Y PSÍQUICO.
 2. **TODAS las zonas lesionadas** llevan "Traumatismo y esguince de..." (tanto articulaciones como zonas no articulares)
 3. **SIEMPRE que haya traumatismos**, incluir "Lesión en nervios periféricos." como ítem separado (va después de las lesiones físicas y antes de limitación funcional)
 4. **SOLO cuando las zonas lesionadas incluyen COLUMNA** (cervical, dorsal, lumbar, lumbosacra, dorsolumbar), se agrega "lesión radicular con secuelas electromiográficas" al ítem de nervios periféricos, quedando: "Lesión en nervios periféricos, lesión radicular con secuelas electromiográficas." — Si NO hay columna afectada, se pone ÚNICAMENTE "Lesión en nervios periféricos."
-5. **SIEMPRE que haya lesión de rodilla**, incluir inmediatamente después: "Lesión meniscal no operada con hipotrofia muscular (3) e hidrartrosis y bloqueo."
+5. **SIEMPRE que haya lesión de rodilla**, incluir inmediatamente después: "Lesión meniscal y ligamentaria no operada con hipotrofia muscular (3) e hidrartrosis y bloqueo."
 6. **SIEMPRE que haya lesión de COLUMNA CERVICAL**, incluir como ítems separados (después del traumatismo de columna cervical):
    - "Cervicobraquialgia y cervicalgia."
    - "Hernia y protrusión discal cervical."
