@@ -296,20 +296,31 @@ Para SCBA:
 
 ## Instrucciones para generar el DOCX (solo PJN)
 
-Generar el alegato como archivo Word (.docx) usando python-docx. Los titulos de seccion SIEMPRE **subrayados y en negrita**, alineados a la izquierda.
+Generar el alegato como archivo Word (.docx) usando python-docx. Formato obligatorio:
+- **Font**: Arial 12pt
+- **Títulos**: SIEMPRE **negrita + subrayado**, alineados a la izquierda
+- **Cuerpo**: texto justificado (JUSTIFY), interlineado 1.5
+- **Márgenes**: 2cm arriba/abajo, 3cm izquierda, 2cm derecha
 
 ```python
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-def crear_docx_alegato(secciones, titulo_principal, output_path):
+def crear_docx_escrito(secciones, titulo_principal, output_path):
     """
     secciones: lista de tuplas (titulo_seccion, texto_seccion)
                titulo_seccion puede ser None para parrafos sin titulo
     titulo_principal: ej "PARTE ACTORA PRESENTA ALEGATO - INCAPACIDAD 36%"
     """
     doc = Document()
+
+    # Estilo base: Arial 12pt, interlineado 1.5, sin espacio despues
+    style = doc.styles['Normal']
+    style.font.name = 'Arial'
+    style.font.size = Pt(12)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_after = Pt(0)
 
     # Configurar margenes
     for section in doc.sections:
@@ -320,12 +331,12 @@ def crear_docx_alegato(secciones, titulo_principal, output_path):
 
     # Titulo principal (IZQUIERDA, negrita, subrayado)
     p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(titulo_principal.upper())
     run.bold = True
     run.underline = True
     run.font.size = Pt(12)
-    run.font.name = 'Times New Roman'
+    run.font.name = 'Arial'
 
     doc.add_paragraph()  # Espacio
 
@@ -338,17 +349,17 @@ def crear_docx_alegato(secciones, titulo_principal, output_path):
             run.bold = True
             run.underline = True
             run.font.size = Pt(12)
-            run.font.name = 'Times New Roman'
+            run.font.name = 'Arial'
 
-        # Parrafos del texto
+        # Parrafos del texto (JUSTIFICADOS)
         for parrafo in texto.split('\n\n'):
             parrafo = parrafo.strip()
             if parrafo:
                 p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 run = p.add_run(parrafo)
                 run.font.size = Pt(12)
-                run.font.name = 'Times New Roman'
+                run.font.name = 'Arial'
 
     doc.save(output_path)
 ```
