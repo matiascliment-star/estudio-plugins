@@ -31,6 +31,20 @@ Antes de ejecutar el control, leer estos archivos de referencia:
 - `skills/impugnar-pericia/references/plantilla-impugnacion.md` — Template del escrito
 - `skills/impugnar-pericia/references/argumentos-medico-legales.md` — Catalogo de argumentos legales
 - `skills/impugnar-pericia/references/modelos-impugnacion.md` — **42+ modelos reales** de escritos del estudio, organizados por categoria (factores, rodilla, hernias, nervios, psiquica, causalidad, baremo, etc.). **CRITICO: estos modelos contienen los TEXTOS LITERALES que hay que usar. NO parafrasear. Copiar el texto tal cual del modelo que corresponda y solo reemplazar los datos del caso** (nombre del perito, porcentajes, fechas, expediente, partes, lateralidad, etc.)
+- `skills/impugnar-pericia/references/baremo-549-2025.md` — **Tablas del Decreto 549/2025** con diferencias clave vs 659/96
+
+## REGLA DE DOBLE CONTROL DE BAREMO
+
+**SIEMPRE controlar la pericia contra AMBOS baremos (659/96 y 549/2025).**
+
+1. Verificar cual baremo uso el perito
+2. Si uso 549/2025 y el accidente es anterior a su vigencia → ERROR GRAVE (irretroactividad)
+3. **Independientemente del error de baremo**, calcular la incapacidad bajo AMBOS baremos
+4. Mostrar al usuario una tabla comparativa con ambos calculos
+5. **Decirle al usuario cual baremo es mas favorable para el caso concreto** y por que:
+   - Si 659/96 da mas → impugnar uso de 549/2025 + pedir 659/96
+   - Si 549/2025 da mas → no impugnar el baremo (aunque sea retroactivo, si favorece al actor no conviene)
+   - Si son similares → evaluar si vale la pena impugnar
 
 ## Flujo de 7 Fases
 
