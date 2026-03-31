@@ -148,7 +148,7 @@ Aplicar TODOS los controles cruzando datos de la demanda contra la pericia. Leer
 
 **SECCION 6 — Factores de ponderacion:**
 - 6.1 Si aplico factores
-- 6.2 Factor edad: suma ARITMETICA directa (1% por ano sobre 30). NO porcentual
+- 6.2 Factor edad: es una TABLA con rangos por franja etaria (<21 años: 0-4%, 21-30 años: 0-3%, 31+ años: 0-2%). Verificar: (a) que el % este dentro del rango de la tabla, (b) que se haya sumado de forma ARITMETICA DIRECTA (como puntos porcentuales que se adicionan al total), NO porcentual (NO como % de la incapacidad)
 - 6.3 Dificultad para tareas: leve ≤10%, intermedia 11-15%, alta 16-20%
 - 6.4 **Factores sobre psiquica**: dificultad y recalificacion TAMBIEN aplican sobre lo psiquico
 
@@ -177,7 +177,7 @@ Mostrar al usuario una tabla con TODOS los items controlados:
 | 1.3 | Lateralidad | ERROR | Demanda: rodilla DERECHA / Pericia: rodilla IZQUIERDA |
 | 2.3 | Limitacion funcional | WARNING | Flexion 0-120° = 5% segun baremo, perito asigno 2% |
 | 5.2 | Decreto 549/2025 | ERROR | Perito uso 549/2025, accidente anterior a su vigencia |
-| 6.2 | Factor edad | ERROR | Aplico porcentual (10% de 25% = 2.5%) en vez de aritmetico (10%) |
+| 6.2 | Factor edad | ERROR | Tabla: 31+ = 0-2%. Perito puso 3% (fuera de rango) y lo aplico porcentual |
 ...
 ```
 

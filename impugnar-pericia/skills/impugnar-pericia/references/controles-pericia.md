@@ -347,19 +347,28 @@ Recalcular la incapacidad total usando 659/96 con suma aritmetica y verificar si
 
 ### 6.2 Factor edad
 
-**REGLA:** Edad - 30 = puntos porcentuales que se suman DIRECTO.
+**REGLA:** El factor edad es una TABLA con rangos por franja etaria:
+
+| Franja etaria | Rango |
+|---------------|-------|
+| Menos de 21 anos | 0-4% |
+| De 21 a 30 anos | 0-3% |
+| De 31 y mas anos | 0-2% |
+
+Se verifica: (a) que el % este dentro del rango de la tabla para la edad del actor, (b) que se haya sumado de forma ARITMETICA DIRECTA (como puntos porcentuales que se adicionan al total), NO como porcentaje de la incapacidad.
 
 | Resultado | Condicion |
 |-----------|-----------|
-| OK | Aplico factor edad de forma aritmetica directa |
-| ERROR | Aplico factor edad como PORCENTAJE de la incapacidad |
+| OK | El % esta en el rango correcto y se sumo de forma aritmetica directa |
+| ERROR | El % esta fuera del rango de la tabla (ej: 3% para 31+ cuando el max es 2%) |
+| ERROR | Aplico factor edad como PORCENTAJE de la incapacidad (ej: 2% de 30% = 0.6%) |
 | ERROR | No aplico factor edad |
-| ERROR | El valor del factor edad es incorrecto |
 
 **Ejemplo de error tipico:**
-- Actor de 40 anos, incapacidad 25%
-- CORRECTO: Factor edad = 10% (40 - 30 = 10 puntos)
-- INCORRECTO: Factor edad = 10% de 25% = 2.5%
+- Actor de 45 anos (31+), incapacidad 30%
+- CORRECTO: Factor edad = hasta 2% (sumado directo como puntos porcentuales)
+- INCORRECTO: Factor edad = 3% (fuera del rango 0-2%)
+- INCORRECTO: Factor edad = 2% de 30% = 0.6% (aplicacion porcentual)
 
 ### 6.3 Factor dificultad para tareas habituales
 
