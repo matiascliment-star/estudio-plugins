@@ -29,9 +29,9 @@
     },
     {
       "name": "escritos-judiciales",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "./escritos-judiciales",
-      "description": "Subir escritos y borradores a PJN y MEV/SCBA",
+      "description": "Redacta, sube y gestiona escritos judiciales: redactar-escrito + subir PJN/MEV",
       "author": { "name": "Matias Climent" }
     },
     {
