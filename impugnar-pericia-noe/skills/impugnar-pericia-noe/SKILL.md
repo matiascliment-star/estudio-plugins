@@ -30,8 +30,34 @@ Antes de ejecutar el control, leer estos archivos de referencia del plugin `impu
 - `../impugnar-pericia/skills/impugnar-pericia/references/argumentos-medico-legales.md` — Catalogo de argumentos legales
 - `../impugnar-pericia/skills/impugnar-pericia/references/modelos-impugnacion.md` — **42+ modelos reales** del estudio. **CRITICO: copiar textos LITERALES, NO parafrasear. Solo reemplazar datos del caso.**
 
-Y la checklist propia de este skill:
+Y las references propias de este skill:
 - `skills/impugnar-pericia-noe/references/checklist-noe.md` — **Checklist obligatoria modelo Noe** (este es el eje del control)
+- `skills/impugnar-pericia-noe/references/baremo-549-2025.md` — **Tablas del Decreto 549/2025** con diferencias clave vs 659/96
+
+## REGLA DE DOBLE CONTROL DE BAREMO
+
+**SIEMPRE controlar la pericia contra AMBOS baremos (659/96 y 549/2025).**
+
+1. Verificar cual baremo uso el perito
+2. Si uso 549/2025 y el accidente es anterior a su vigencia → ERROR GRAVE (irretroactividad)
+3. **Independientemente del error de baremo**, calcular la incapacidad bajo AMBOS baremos
+4. En el DOCX de control, agregar una seccion comparativa:
+
+```
+COMPARACION DE BAREMOS:
+| Item | 659/96 | 549/2025 | Mas favorable |
+|------|--------|----------|---------------|
+| Cervical (limitacion funcional) | 6% | 6% | Igual |
+| Factor dificultad intermedia | 11-15% | 10% | 659/96 |
+| Factor edad (45 años) | 0-2% | 3% | 549/2025 |
+| Metodo de calculo | Suma aritmetica | Cap. Restante | 659/96 |
+| TOTAL | XX% | YY% | [cual da mas] |
+```
+
+5. **Decirle al usuario cual baremo es mas favorable para el caso concreto** y por que. Esto permite decidir la estrategia:
+   - Si 659/96 da mas → impugnar uso de 549/2025 + pedir 659/96
+   - Si 549/2025 da mas → no impugnar el baremo (aunque sea retroactivo, si favorece al actor no conviene)
+   - Si son similares → evaluar si vale la pena impugnar
 
 ---
 
