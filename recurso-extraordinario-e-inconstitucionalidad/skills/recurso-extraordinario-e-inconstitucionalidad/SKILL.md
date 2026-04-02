@@ -1,5 +1,5 @@
 ---
-name: interponer-recursos
+name: recurso-extraordinario-e-inconstitucionalidad
 description: >
   Interpone Recurso Extraordinario Federal (REX) ante la CSJN y/o Recurso de Inconstitucionalidad (RI)
   ante el TSJ CABA contra sentencias de Cámara. Lee el expediente, analiza la sentencia, identifica
