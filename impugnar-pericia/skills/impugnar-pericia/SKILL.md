@@ -26,7 +26,7 @@ Leer de `~/.env`:
 ## Referencias
 
 Antes de ejecutar el control, leer estos archivos de referencia:
-- `skills/impugnar-pericia/references/baremo-659-96.md` — Tablas del Decreto 659/96
+- `skills/impugnar-pericia/references/baremo-659-96.md` — **Texto COMPLETO del Decreto 659/96** con valores FIJOS por grado de movilidad para cada articulacion (no rangos aproximados). Contiene las tablas exactas de goniometria, fracturas, amputaciones, lesiones menisco-ligamentarias, inestabilidades, cicatrices, neurologia, psiquiatria, factores de ponderacion, etc.
 - `skills/impugnar-pericia/references/controles-pericia.md` — Checklist de controles
 - `skills/impugnar-pericia/references/plantilla-impugnacion.md` — Template del escrito
 - `skills/impugnar-pericia/references/argumentos-medico-legales.md` — Catalogo de argumentos legales
@@ -341,6 +341,6 @@ Alternativa mas simple: pedirle al usuario que copie el texto y lo pegue en un W
 - Si la pericia da alta incapacidad y buena causalidad, NO impugnar aunque tenga errores menores
 - Los factores de ponderacion (dificultad, recalificacion) aplican a AMBAS incapacidades (fisica Y psiquica)
 - El metodo de Balthazar (capacidad restante) bajo Decreto 659/96 SOLO se aplica cuando hay incapacidad previa de siniestro anterior
-- Siempre consultar el baremo 659/96 para verificar porcentajes de limitacion funcional
+- Siempre consultar el baremo 659/96 para verificar porcentajes de limitacion funcional. **El archivo baremo-659-96.md contiene el decreto COMPLETO con valores FIJOS por grado** (ej: tobillo flexion plantar 30° = 2%, rodilla flexion 120° = 4%). NO usar rangos aproximados: buscar el grado exacto que informo el perito en la tabla del decreto
 - **Decreto 549/2025**: Desde su sancion, es CADA VEZ MAS FRECUENTE que los peritos lo apliquen retroactivamente a siniestros anteriores. Este error tiene doble impacto: (1) porcentajes reducidos, (2) capacidad restante generalizada que no corresponde bajo 659/96. SIEMPRE plantear la inconstitucionalidad como SUBSIDIARIA (para el caso de que el juez considere aplicable el 549/2025). SIEMPRE pedir al perito que haga el calculo alternativo con 659/96 + suma aritmetica para que el juez tenga ambas opciones al sentenciar
 - Cuando el 549/2025 se aplica retroactivamente, verificar si el recalculo con 659/96 hace superar umbrales legales (50% T.O. = prestacion mensual complementaria, 66% T.O. = gran invalidez). Enfatizar esto en la observacion
