@@ -33,7 +33,7 @@ Leer de `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`):
 - I.V.A. responsable inscripto
 - Email: matiasgarciacliment@gmail.com
 - Tel: 4-545-2488
-- Domicilio procesal PJN: Av. Ricardo Balbín 2368, C.A.B.A. (zona de notificación 204)
+- Domicilio procesal PJN: Av. Ricardo Balbín 2401 1°A, C.A.B.A. (zona de notificación 204)
 - Domicilio electrónico PJN: 2031306198
 - Domicilio electrónico SCBA: 20313806198@notificaciones.scba.gov.ar
 
