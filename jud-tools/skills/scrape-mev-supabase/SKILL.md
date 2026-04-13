@@ -32,7 +32,7 @@ ORDER BY e.numero_causa;
 Una vez identificado el expediente (por su `id`):
 
 ```sql
-SELECT fecha, tipo, descripcion, url_proveido
+SELECT fecha, tipo, descripcion, url_proveido, texto_proveido
 FROM movimientos_judicial
 WHERE expediente_id = {id}
   AND fuente = 'MEV'
@@ -40,6 +40,32 @@ ORDER BY fecha DESC;
 ```
 
 Para los ultimos N movimientos, agregar `LIMIT N`.
+
+## Leer el contenido de un documento/proveido
+
+La columna `texto_proveido` contiene el texto completo extraido del PDF del proveido. **NO es necesario usar el MCP Judicial (mev_leer_documentos) para leer documentos** — el contenido ya esta en Supabase.
+
+Si necesitas leer un documento especifico:
+
+```sql
+SELECT fecha, tipo, descripcion, texto_proveido
+FROM movimientos_judicial
+WHERE expediente_id = {id}
+  AND fuente = 'MEV'
+  AND texto_proveido IS NOT NULL
+ORDER BY fecha DESC;
+```
+
+Para buscar dentro del contenido de los proveidos:
+
+```sql
+SELECT fecha, tipo, descripcion, texto_proveido
+FROM movimientos_judicial
+WHERE expediente_id = {id}
+  AND fuente = 'MEV'
+  AND texto_proveido ILIKE '%{busqueda}%'
+ORDER BY fecha DESC;
+```
 
 ## Listar todos los expedientes Provincia
 
@@ -99,6 +125,12 @@ ORDER BY m.fecha DESC;
 | tipo | text | Tipo de actuacion |
 | descripcion | text | Texto de la actuacion |
 | url_proveido | text | URL al proveido/PDF |
+| texto_proveido | text | Texto completo extraido del PDF del proveido |
+| pdf_url | text | URL al PDF |
+| procesado | bool | Si fue procesado |
+| estado | text | Estado del movimiento |
+| tarea | text | Tarea asignada |
+| responsable | text | Responsable asignado |
 
 ## Instrucciones para el Agente
 
@@ -107,4 +139,5 @@ ORDER BY m.fecha DESC;
 3. Mostrar los movimientos de forma clara y cronologica
 4. Si el usuario pide "los ultimos movimientos", usar LIMIT
 5. Si el usuario pide novedades de un periodo, filtrar por fecha
-6. NO scrapear del MEV. NO usar tools del judicial server. Solo Supabase.
+6. **Para leer el contenido de un proveido/documento, usar la columna `texto_proveido` de Supabase. NO usar mev_leer_documentos del MCP Judicial — el texto ya esta en Supabase.**
+7. NO scrapear del MEV. Solo Supabase.

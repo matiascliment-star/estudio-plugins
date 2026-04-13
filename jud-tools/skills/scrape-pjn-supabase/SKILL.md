@@ -33,13 +33,37 @@ ORDER BY e.numero_causa;
 Una vez identificado el expediente (por su `id`):
 
 ```sql
-SELECT fecha, tipo, descripcion, fojas, oficina, url_documento
+SELECT fecha, tipo, descripcion, fojas, oficina, url_documento, texto_documento
 FROM movimientos_pjn
 WHERE expediente_id = {id}
 ORDER BY fecha DESC;
 ```
 
 Para los ultimos N movimientos, agregar `LIMIT N`.
+
+## Leer el contenido de un documento
+
+La columna `texto_documento` contiene el texto completo extraido del PDF del movimiento. **NO es necesario usar el MCP Judicial (pjn_leer_documentos) para leer documentos** — el contenido ya esta en Supabase.
+
+Si necesitas leer un documento especifico:
+
+```sql
+SELECT fecha, tipo, descripcion, texto_documento
+FROM movimientos_pjn
+WHERE expediente_id = {id}
+  AND texto_documento IS NOT NULL
+ORDER BY fecha DESC;
+```
+
+Para buscar dentro del contenido de los documentos:
+
+```sql
+SELECT fecha, tipo, descripcion, texto_documento
+FROM movimientos_pjn
+WHERE expediente_id = {id}
+  AND texto_documento ILIKE '%{busqueda}%'
+ORDER BY fecha DESC;
+```
 
 ## Listar todos los expedientes CABA
 
@@ -97,6 +121,9 @@ ORDER BY m.fecha DESC;
 | fojas | text | Fojas |
 | oficina | text | Oficina (ej: "T42") |
 | url_documento | text | URL al documento PDF |
+| texto_documento | text | Texto completo extraido del PDF del documento |
+| pjn_cid | text | ID interno PJN |
+| procesado | bool | Si fue procesado |
 
 ## Instrucciones para el Agente
 
@@ -105,4 +132,5 @@ ORDER BY m.fecha DESC;
 3. Mostrar los movimientos de forma clara y cronologica
 4. Si el usuario pide "los ultimos movimientos", usar LIMIT
 5. Si el usuario pide novedades de un periodo, filtrar por fecha
-6. NO scrapear del PJN. NO usar tools del judicial server. Solo Supabase.
+6. **Para leer el contenido de un documento, usar la columna `texto_documento` de Supabase. NO usar pjn_leer_documentos del MCP Judicial — el texto ya esta en Supabase.**
+7. NO scrapear del PJN. Solo Supabase.
