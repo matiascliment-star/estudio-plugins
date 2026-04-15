@@ -66,6 +66,7 @@ Reglas:
 | Tobillo | Traumatismo y esguince de tobillo [lado] |
 | Muñeca | Traumatismo y esguince de muñeca [lado] |
 | Mano / Dedos | Traumatismo de mano [lado] / Traumatismo de dedos [especificar] |
+| Pie | Traumatismo de dedos del pie [lado] (NUNCA "pie", siempre "dedos del pie") |
 | Columna cervical | Traumatismo de columna cervical |
 | Columna lumbar | Traumatismo de columna lumbosacra |
 | Codo | Traumatismo y esguince de codo [lado] |

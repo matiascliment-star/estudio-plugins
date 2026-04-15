@@ -70,3 +70,4 @@ MANIFIESTA LESIONES – RECLAMA DAÑO FÍSICO Y PSÍQUICO.
 8. Siempre incluir "Daño psíquico"
 9. Siempre cerrar con la cláusula de reserva sobre nuevas patologías
 10. Respetar la lateralidad (izquierda/derecha/ambas) de la ficha
+11. **NUNCA usar "pie"** como zona lesionada. Siempre convertir "pie" a **"dedos del pie [lado]"**. Ejemplo: "Traumatismo de dedos del pie derecho."

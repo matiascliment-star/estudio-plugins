@@ -120,7 +120,7 @@ Las articulaciones se tuercen y traumatizan, no solo se golpean.
 | Traumatismo de rodilla | Requiere impacto: "su rodilla impactó de pleno contra [superficie: piso/peldaño/objeto]" |
 | Esguince + Traumatismo de rodilla | Combinación de ambos: torsión PRIMERO + impacto contra superficie DESPUÉS |
 | Esguince de tobillo/pie | "sufrió una severa entorsis en dicha articulación" / "inversión forzada del tobillo" |
-| Traumatismo de tobillo/pie | Requiere impacto: "su pie/tobillo impactó contra [superficie]" |
+| Traumatismo de tobillo/dedos del pie | Requiere impacto: "sus dedos del pie/tobillo impactaron contra [superficie]" (NUNCA usar "pie" solo, siempre "dedos del pie") |
 | Fractura | "impactó de pleno contra [superficie]" / "el golpe fue de tal magnitud que fracturó..." |
 | TEC | "golpeó su cabeza contra [superficie] realizando un movimiento brusco" |
 | Cicatriz quirúrgica | NO SE NARRA (es consecuencia del tratamiento, no del accidente) |
@@ -143,6 +143,7 @@ Las articulaciones se tuercen y traumatizan, no solo se golpean.
 4. **Mantener coherencia** entre la descripción del cliente y el relato expandido
 5. **No exagerar** más allá de lo verosímil según las lesiones documentadas
 6. El relato debe tener entre 3 y 6 párrafos
+7. **SIEMPRE poner que el trabajador NO pudo continuar trabajando / con su trayecto** después del accidente. Nunca incluir que siguió trabajando, aunque el relato crudo del cliente lo diga. Usar fórmulas como "se vio imposibilitado/a de continuar con su jornada laboral", "no pudiendo continuar con sus tareas habituales", "debió cesar en sus funciones"
 
 ---
 
