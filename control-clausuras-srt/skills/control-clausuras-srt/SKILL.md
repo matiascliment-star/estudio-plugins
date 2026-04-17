@@ -41,9 +41,9 @@ Chequeo semanal (lunes 10:00 AR): verificar que toda Disposición de Clausura te
 - **CABA**: `CABA`, `CM 10L`
 - **Pcia BsAs**: cualquier CM que contenga `LA PLATA`, `LOMAS`, `BAHIA`/`BAHÍA`, `TANDIL`, `SAN ISIDRO`, `ZARATE`/`ZÁRATE`, `CAMPANA`, `MAR DEL PLATA`, `NECOCHEA`, `AZUL`, `LANUS`/`LANÚS`, `SAN MARTIN`/`SAN MARTÍN`, `PILAR`, `MORON`/`MORÓN`, `QUILMES`, `MORENO`, `MATANZA`, `SAN MIGUEL`, `AVELLANEDA`.
 
-### Feriados AR (actualizar anualmente)
+### Feriados AR
 
-Lista completa incluyendo feriados nacionales, días no laborables con fines turísticos y traslados. Ver constante `FERIADOS_AR` dentro del script del Paso 3.
+El script del Paso 3 **fetch automáticamente los feriados** del año actual y siguiente desde la API pública `https://api.argentinadatos.com/v1/feriados/{año}` (incluye feriados inamovibles, trasladables y puentes turísticos). Si la API falla, cae a un fallback hardcoded. No requiere mantenimiento manual.
 
 ## WORKFLOW
 
@@ -102,10 +102,11 @@ Guardar todos los eventos combinados en `/tmp/events.json` con estructura `[{sum
 Crear `/tmp/check.py` con este contenido EXACTO:
 
 ```python
-import json, re
+import json, re, urllib.request
 from datetime import date, datetime, timedelta
 
-FERIADOS_AR = {
+# Fallback hardcoded si la API no responde. Actualizar cuando salen nuevos feriados.
+FERIADOS_FALLBACK = {
     '2025-12-08','2025-12-25',
     '2026-01-01','2026-02-16','2026-02-17',
     '2026-03-23','2026-03-24',
@@ -113,8 +114,31 @@ FERIADOS_AR = {
     '2026-05-01','2026-05-25',
     '2026-06-15','2026-06-20',
     '2026-07-09','2026-07-10',
-    '2026-08-17','2026-10-12','2026-11-23','2026-12-08','2026-12-25',
+    '2026-08-17','2026-10-12','2026-11-23','2026-12-07','2026-12-08','2026-12-25',
 }
+
+def fetch_feriados(year, timeout=10):
+    """Trae feriados desde api.argentinadatos.com. Incluye inamovibles, trasladables y puentes turísticos."""
+    try:
+        url = f'https://api.argentinadatos.com/v1/feriados/{year}'
+        req = urllib.request.Request(url, headers={'User-Agent': 'control-clausuras-srt/1.0'})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read())
+            return {item['fecha'] for item in data if item.get('fecha')}
+    except Exception as e:
+        print(f'[WARN] Feriados API falló para {year}: {e}. Usando fallback.', flush=True)
+        return None
+
+_hoy = date.today()
+FERIADOS_AR = set()
+# Traer año anterior, actual y siguiente (plazos 90d cruzan años y dispos ventana 180d)
+for y in (_hoy.year - 1, _hoy.year, _hoy.year + 1):
+    feriados = fetch_feriados(y)
+    if feriados:
+        FERIADOS_AR |= feriados
+if not FERIADOS_AR:
+    FERIADOS_AR = FERIADOS_FALLBACK
+    print('[WARN] Usando FERIADOS_FALLBACK', flush=True)
 CM_CABA = {'CABA','CM 10L'}
 CM_PCIA = ['LA PLATA','LOMAS','BAHIA','BAHÍA','TANDIL','SAN ISIDRO','ZARATE','ZÁRATE',
            'CAMPANA','MAR DEL PLATA','NECOCHEA','AZUL','LANUS','LANÚS','SAN MARTIN',

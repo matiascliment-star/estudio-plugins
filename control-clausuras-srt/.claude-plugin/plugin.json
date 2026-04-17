@@ -1,6 +1,6 @@
 {
   "name": "control-clausuras-srt",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Control semanal de Disposiciones de Clausura SRT: verifica que las dispos estén agendadas en Google Calendar con plazo correcto (15d CABA, 15+90d Pcia), auto-agenda las faltantes con plazo vigente y manda reporte por WhatsApp al grupo Control Dispos SRT.",
   "author": {
     "name": "Matias Climent"
