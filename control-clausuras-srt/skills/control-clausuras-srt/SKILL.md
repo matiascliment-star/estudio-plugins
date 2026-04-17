@@ -43,7 +43,7 @@ Chequeo semanal (lunes 10:00 AR): verificar que toda Disposición de Clausura te
 
 ### Feriados AR
 
-El script del Paso 3 **fetch automáticamente los feriados** del año actual y siguiente desde la API pública `https://api.argentinadatos.com/v1/feriados/{año}` (incluye feriados inamovibles, trasladables y puentes turísticos). Si la API falla, cae a un fallback hardcoded. No requiere mantenimiento manual.
+El script del Paso 3 intenta bajar los feriados desde `https://api.argentinadatos.com/v1/feriados/{año}` para año anterior, actual y siguiente. Si la API falla (el sandbox de Anthropic suele bloquear egress a ese host), cae a un fallback hardcoded con los feriados AR 2025/2026 completos. **Para 2027 y posteriores, actualizar el set `FERIADOS_FALLBACK` en enero de cada año** si el fetch sigue siendo bloqueado.
 
 ## WORKFLOW
 
@@ -67,72 +67,76 @@ ORDER BY m.fecha_notificacion ASC;
 
 → guardar como JSON array en `/tmp/clausuras.json` con estructura `[{srt, fecha_dispo, nombre, cm}, ...]`.
 
-### Paso 1b — Rellenar CM NULL con duplicados
+### Paso 1b — Rellenar CM NULL con duplicados (UPDATE bulk)
 
-Para cada clausura con `cm IS NULL`, buscar si existe otro registro en `casos_srt` con el mismo `nombre` y CM cargada:
-
-```sql
-SELECT comision_medica FROM casos_srt
-WHERE nombre ILIKE $1 AND comision_medica IS NOT NULL
-LIMIT 1;
-```
-
-Si se encuentra, actualizar el registro NULL:
+Ejecutar una sola query que actualiza en masa los CM NULL con CMs encontradas en duplicados del mismo `nombre`:
 
 ```sql
-UPDATE casos_srt SET comision_medica = $1
-WHERE numero_srt = $2 AND comision_medica IS NULL;
+UPDATE casos_srt AS c SET comision_medica = dup.cm
+FROM (
+    SELECT DISTINCT ON (nombre) nombre, comision_medica AS cm
+    FROM casos_srt WHERE comision_medica IS NOT NULL
+    ORDER BY nombre, updated_at DESC NULLS LAST
+) dup
+WHERE c.comision_medica IS NULL
+  AND c.nombre = dup.nombre
+  AND c.numero_srt IN (
+    SELECT srt_expediente_nro FROM comunicaciones_miventanilla
+    WHERE tipo_comunicacion = 'Notificación de Acto Administrativo'
+      AND detalle ILIKE '%Clausura%'
+      AND fecha_notificacion >= (now() - interval '180 days')
+  )
+RETURNING c.numero_srt, c.nombre, c.comision_medica;
 ```
+
+**IMPORTANTE**: después de correr este UPDATE, **re-ejecutar el query del Paso 1** para obtener `clausuras.json` con los CMs actualizados. Sin este refresh, los casos rellenados quedarían como NULL en el análisis.
 
 ### Paso 2 — Eventos de Calendar (con created)
 
-**Crítico**: hay que bajar eventos de AMBOS calendarios con rango amplio. Muchos 15d están solo en el principal y los 90d en ✱ Vencimientos.
+**Crítico**: hay que bajar eventos de AMBOS calendarios con rango amplio. Muchos 15d están solo en el principal y los 90d en ✱ Vencimientos. El rango tiene que cubrir clausuras de hasta **180 días atrás** (sus eventos 15d pudieron ser agendados recientemente pero los 90d están a 6 meses vista).
 
-Listar eventos con `mcp__claude_ai_Google_Calendar__list_events` en cada calendario:
+Llamar `mcp__claude_ai_Google_Calendar__list_events` en cada calendario con estos params:
 
 ```
-Calendarios:
-  - flirteador84@gmail.com (principal)
-  - f98t26v6l01v4ss922e069rid0@group.calendar.google.com (✱ Vencimientos)
-
-Params:
-  fullText: "VENCE APELAR CLAUSURA"
-  pageSize: 250
-  startTime: 2025-10-01T00:00:00-03:00   (o hoy-180d si sos conservador)
-  endTime: hoy + 220 días (para cubrir 90d de clausuras recientes)
+calendarId: <uno de los dos>
+fullText: "VENCE APELAR CLAUSURA"
+pageSize: 250
+startTime: hoy - 200 días, en ISO con timezone -03:00
+endTime:   hoy + 220 días, en ISO con timezone -03:00
 ```
 
-**Manejo de overflow**: si la respuesta excede el límite de tokens, queda guardada en un archivo `.txt` automáticamente. En ese caso usar `jq` para extraer solo lo necesario:
+**Manejo del output**: para CADA calendario, la respuesta viene inline O en un archivo `.txt` (si excede tokens). Guardar ambos como JSONL y combinar después:
 
 ```bash
-jq -c '.events[] | {summary, start_date: .start.date, created}' /path/to/output.txt
+# Si el output vino inline, escribir el JSON crudo con Write
+# Si vino en archivo, usar la ruta que devolvió el tool
+
+# Para cada fuente, normalizar a JSONL:
+jq -c '.events[] | {id, summary, start_date: (.start.date // (.start.dateTime|.[0:10])), created}' <archivo_raw> >> /tmp/events_all.jsonl
 ```
 
-Si ambos calendars quedan en archivos separados, combinarlos con dedup por `summary+start_date`:
+Una vez procesados ambos calendarios, dedupear por `id` y convertir a JSON array:
 
 ```bash
 python3 <<'EOF'
-import json, glob
+import json
 seen = set()
 events = []
-for f in ['/tmp/venc.jl', '/tmp/princ.jl']:  # ajustar paths
-    try:
-        with open(f) as fp:
-            for line in fp:
-                if not line.strip(): continue
-                ev = json.loads(line)
-                key = (ev.get('summary',''), ev.get('start_date',''))
-                if key in seen: continue
-                seen.add(key)
-                events.append(ev)
-    except FileNotFoundError:
-        pass
+with open('/tmp/events_all.jsonl') as f:
+    for line in f:
+        line = line.strip()
+        if not line: continue
+        ev = json.loads(line)
+        eid = ev.get('id')
+        if eid in seen: continue
+        seen.add(eid)
+        events.append({k: ev.get(k) for k in ('summary','start_date','created')})
 json.dump(events, open('/tmp/events.json','w'))
 print(f'Eventos únicos: {len(events)}')
 EOF
 ```
 
-**Validación**: el archivo `/tmp/events.json` debería tener **al menos 200 eventos** si el rango cubre 6 meses de actividad. Si tiene muy pocos (<50), revisar: probablemente uno de los calendars no se bajó. En ese caso reintentar la query del calendar faltante antes de seguir.
+**Validación**: `/tmp/events.json` debería tener **al menos 150 eventos** para un rango de 6+ meses. Si queda con menos de 80, reintentar el fetch del calendar que falló antes de seguir. No avanzar con datos parciales (generaría falsos "vencidos sin evento" y "0 críticos" porque no encuentra los eventos que sí existen).
 
 ### Paso 3 — Correr el analizador
 
