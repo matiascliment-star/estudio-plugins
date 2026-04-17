@@ -48,6 +48,8 @@ Guardar como `/tmp/feriados.json` → `["2026-01-01", ...]`.
 
 ### Paso 1 — Comunicaciones nuevas pendientes
 
+**Para agendar en Calendar** (Dictamen Médico + ITM):
+
 ```sql
 SELECT m.id,
   m.srt_expediente_nro AS srt,
@@ -62,9 +64,31 @@ WHERE m.tipo_comunicacion IN ('Notificación de Dictamen Médico', 'Notificació
 ORDER BY m.fecha_notificacion ASC;
 ```
 
-**Ventana 30 días**: si una comunicación llegó hace más y nunca se procesó, ya pasó el plazo de 3 hábiles (excepto edge cases con muchos feriados). Descartarla como "fuera de ventana" no tiene sentido reagendarla tardío. Si quedan NULL más viejos, el skill los ignora (se agendan manual).
+**Para alertar al grupo** (Constancia de Orden de Estudio + Sol Historia Clinica):
 
-Guardar como `/tmp/comunicaciones.json`.
+```sql
+SELECT m.id,
+  m.srt_expediente_nro AS srt,
+  (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_notif,
+  m.detalle,
+  c.nombre,
+  cl.telefono AS cliente_tel
+FROM comunicaciones_miventanilla m
+LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
+LEFT JOIN clientes cl ON cl.id = c.cliente_id
+WHERE m.tipo_comunicacion = 'Notificación de Constancia de Orden de Estudio'
+  AND m.agendado_en_calendar_at IS NULL  -- reutilizamos la misma col para trackear
+  AND m.fecha_notificacion >= (now() - interval '7 days')  -- ventana más corta, el cliente tiene que hacerse el estudio YA
+ORDER BY m.fecha_notificacion ASC;
+```
+
+Dos tipos de detalle:
+- `Constancia de Orden de Estudio`: cliente tiene que hacerse un estudio (ver PDF para detalles)
+- `Sol Historia Clinica`: a veces al estudio, a veces al cliente (ver PDF para saber a quién va)
+
+**Ventana 30 días para agendar**: si una comunicación llegó hace más, ya pasó el plazo de 3 hábiles. El skill los ignora (se agendan manual si corresponde).
+
+Guardar como `/tmp/comunicaciones.json` (para agendar) y `/tmp/alertas_pdf.json` (para alerta manual).
 
 ### Paso 2 — Calcular fecha objetivo para cada una
 
@@ -134,16 +158,24 @@ from datetime import date
 agendados = [c for c in json.load(open('/tmp/comunicaciones_con_fecha.json')) if c.get('agendado_ok')]
 errores = [c for c in json.load(open('/tmp/comunicaciones_con_fecha.json')) if c.get('error')]
 sin_caso = [c for c in agendados if not c.get('nombre')]
+alertas_pdf = json.load(open('/tmp/alertas_pdf.json')) if __import__('os').path.exists('/tmp/alertas_pdf.json') else []
 
 hoy = date.today()
 L = [f'📋 *AGENDAR COMUNICACIONES SRT* — {hoy.strftime("%d/%m/%Y")}']
-L.append(f'Agendadas hoy: {len(agendados)} | Errores: {len(errores)} | Sin caso en app: {len(sin_caso)}')
+L.append(f'Agendadas: {len(agendados)} | Revisar PDF: {len(alertas_pdf)} | Errores: {len(errores)} | Sin caso: {len(sin_caso)}')
 
 if agendados:
-    L.append('\n✅ *AGENDADAS HOY*')
+    L.append('\n✅ *AGENDADAS EN CALENDAR*')
     for a in agendados:
         tipo_corto = 'DICT MED' if 'Dictamen' in a['tipo_comunicacion'] else 'ITM'
         L.append(f"• {a['nombre'] or '(sin nombre)'} ({a['srt']}) {tipo_corto}: vence {a['fecha_vence']}")
+
+if alertas_pdf:
+    L.append('\n📎 *REVISAR PDF EN MI VENTANILLA Y AVISAR AL CLIENTE*')
+    for al in alertas_pdf:
+        tipo = 'Orden Estudio' if 'Orden de Estudio' in al['detalle'] else 'Sol Historia Clínica'
+        tel = f" tel {al['cliente_tel']}" if al.get('cliente_tel') else " ⚠️sin tel"
+        L.append(f"• {al.get('nombre') or '(sin nombre)'} ({al['srt']}) {tipo} — notif {al['fecha_notif']}{tel}")
 
 if errores:
     L.append('\n🔴 *ERRORES*')
@@ -155,10 +187,19 @@ if sin_caso:
     for s in sin_caso:
         L.append(f"• SRT {s['srt']} (notif {s['fecha_notif']}) — cargar caso en la app")
 
-if not agendados and not errores and not sin_caso:
+if not agendados and not errores and not sin_caso and not alertas_pdf:
     L.append('\n✅ Sin comunicaciones nuevas hoy.')
 
 open('/tmp/reporte.txt','w').write('\n'.join(L))
+```
+
+**IMPORTANTE**: después de generar el reporte, marcar las `alertas_pdf` como procesadas también (con `agendado_por = 'claude-alerta'` para distinguirlas de las agendadas en calendar) para no repetirlas al día siguiente:
+
+```sql
+UPDATE comunicaciones_miventanilla
+SET agendado_en_calendar_at = now(),
+    agendado_por = 'claude-alerta'
+WHERE id = ANY($alertas_ids);
 ```
 
 ### Paso 6 — INSERT en runs table (dispara WA automáticamente)
