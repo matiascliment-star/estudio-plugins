@@ -209,15 +209,20 @@ if CASO['variante'] == 'B':
         f'(a) Se TRABE EMBARGO a favor del suscripto, {CASO["letrado_nombre"]}, CUIT '
         f'{CASO["letrado_cuit"]}, sobre las sumas depositadas en la cuenta de autos por la '
         f'parte demandada, hasta cubrir la totalidad de ${CASO["monto_total"]} en concepto de '
-        'honorarios profesionales, con más lo que corresponda por diferencias pendientes '
-        'conforme las reservas oportunamente formuladas.'
+        f'honorarios profesionales (honorarios ${CASO["honorarios"]} + IVA ${CASO["iva"]}), '
+        'con más lo que corresponda por diferencias pendientes conforme las reservas '
+        'oportunamente formuladas.'
     )
     add_par_mixto([
         ('(b) Se ', False, False),
         ('ORDENE TRANSFERIR', True, False),
         (' la suma de ', False, False),
         (f'${CASO["monto_total"]}', True, False),
-        (' desde la cuenta de autos a la cuenta bancaria del suscripto, ', False, False),
+        (' (honorarios ', False, False),
+        (f'${CASO["honorarios"]}', True, False),
+        (' + IVA ', False, False),
+        (f'${CASO["iva"]}', True, False),
+        (') desde la cuenta de autos a la cuenta bancaria del suscripto, ', False, False),
         (CASO['letrado_nombre'], True, False),
         (f', DNI {CASO["letrado_dni"]}, CUIT {CASO["letrado_cuit"]}, abierta en el '
          f'{CASO["banco"]}, Caja de Ahorro $ N° {CASO["caja_ahorro"]}, CBU {CASO["cbu"]}, '
