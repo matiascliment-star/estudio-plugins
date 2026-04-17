@@ -86,16 +86,53 @@ WHERE numero_srt = $2 AND comision_medica IS NULL;
 
 ### Paso 2 — Eventos de Calendar (con created)
 
-Listar eventos de ambos calendarios con `fullText="VENCE APELAR CLAUSURA"`, rango `[hoy-30d, hoy+200d]`.
+**Crítico**: hay que bajar eventos de AMBOS calendarios con rango amplio. Muchos 15d están solo en el principal y los 90d en ✱ Vencimientos.
 
-Extraer para cada evento: `summary`, `start.date`, `created`.
+Listar eventos con `mcp__claude_ai_Google_Calendar__list_events` en cada calendario:
 
-Si la respuesta del MCP excede tokens, guardar a file y parsear con jq:
-```bash
-jq -c '.events[] | {summary, start_date: .start.date, created}' raw.json
+```
+Calendarios:
+  - flirteador84@gmail.com (principal)
+  - f98t26v6l01v4ss922e069rid0@group.calendar.google.com (✱ Vencimientos)
+
+Params:
+  fullText: "VENCE APELAR CLAUSURA"
+  pageSize: 250
+  startTime: 2025-10-01T00:00:00-03:00   (o hoy-180d si sos conservador)
+  endTime: hoy + 220 días (para cubrir 90d de clausuras recientes)
 ```
 
-Guardar todos los eventos combinados en `/tmp/events.json` con estructura `[{summary, start_date, created}, ...]`.
+**Manejo de overflow**: si la respuesta excede el límite de tokens, queda guardada en un archivo `.txt` automáticamente. En ese caso usar `jq` para extraer solo lo necesario:
+
+```bash
+jq -c '.events[] | {summary, start_date: .start.date, created}' /path/to/output.txt
+```
+
+Si ambos calendars quedan en archivos separados, combinarlos con dedup por `summary+start_date`:
+
+```bash
+python3 <<'EOF'
+import json, glob
+seen = set()
+events = []
+for f in ['/tmp/venc.jl', '/tmp/princ.jl']:  # ajustar paths
+    try:
+        with open(f) as fp:
+            for line in fp:
+                if not line.strip(): continue
+                ev = json.loads(line)
+                key = (ev.get('summary',''), ev.get('start_date',''))
+                if key in seen: continue
+                seen.add(key)
+                events.append(ev)
+    except FileNotFoundError:
+        pass
+json.dump(events, open('/tmp/events.json','w'))
+print(f'Eventos únicos: {len(events)}')
+EOF
+```
+
+**Validación**: el archivo `/tmp/events.json` debería tener **al menos 200 eventos** si el rango cubre 6 meses de actividad. Si tiene muy pocos (<50), revisar: probablemente uno de los calendars no se bajó. En ese caso reintentar la query del calendar faltante antes de seguir.
 
 ### Paso 3 — Correr el analizador
 
@@ -327,6 +364,14 @@ print(open('/tmp/reporte.txt').read())
 
 ### Paso 6 — Enviar por WhatsApp
 
+Usar el MCP de WhatsApp (`mcp__whatsapp__wa_send_text`):
+
+- **instanceId**: `inst_d9c22079`
+- **to**: `120363182236641964@g.us` (grupo "Control Dispos SRT")
+- **text**: contenido de `/tmp/reporte.txt`
+
+Si el MCP de WhatsApp no está disponible por alguna razón, fallback con curl a la edge function de Supabase:
+
 ```bash
 REPORTE=$(cat /tmp/reporte.txt)
 curl -sX POST "https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send" \
@@ -334,7 +379,7 @@ curl -sX POST "https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send" \
   --data "$(jq -n --arg text "$REPORTE" '{chatId:"120363182236641964@g.us", text:$text}')"
 ```
 
-Verificar que devuelva `{"status":"ok", ...}`. Si falla, reintentar 1 vez.
+Verificar que el send devuelva `{status: "queued", jobId: ...}`. Si falla, reintentar 1 vez.
 
 ### Paso 7 — Confirmar
 
