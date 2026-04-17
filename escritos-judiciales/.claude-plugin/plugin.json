@@ -1,7 +1,7 @@
 {
   "name": "escritos-judiciales",
-  "version": "1.2.0",
-  "description": "Redacta, sube y gestiona escritos judiciales argentinos. Incluye: redactar-escrito (lee expediente PJN/MEV, redacta DOCX profesional), subir-escrito-pjn (borrador PJN), subir-escrito-mev (borrador SCBA), pedir-embargo (embargo bancario), pedir-giro-honorarios (libramiento de giro de honorarios PJN/CABA con constancias embebidas).",
+  "version": "1.3.0",
+  "description": "Redacta, sube y gestiona escritos judiciales argentinos. Incluye: redactar-escrito, subir-escrito-pjn, subir-escrito-mev, pedir-embargo, pedir-giro-honorarios (con constancias embebidas), actualizar-liquidacion (reclama diferencias de capital RIPTE/tasa/IPC/CER y honorarios al UMA vigente, con dos escenarios de prorrateo).",
   "author": {
     "name": "Matias Climent"
   },
