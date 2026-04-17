@@ -365,33 +365,22 @@ open('/tmp/reporte.txt','w').write('\n'.join(L))
 print(open('/tmp/reporte.txt').read())
 ```
 
-### Paso 6 — Enviar por WhatsApp
+### Paso 6 — (sin paso manual de envío)
 
-Usar el MCP de WhatsApp (`mcp__whatsapp__wa_send_text`):
+**El envío por WhatsApp es automático** al hacer el INSERT del Paso 7. La tabla `control_clausuras_runs` tiene un trigger (`trg_control_clausuras_wa`) que al insertar un run llama a `pg_net.http_post` → edge function `wa-send` → MCP WhatsApp → grupo "Control Dispos SRT".
 
-- **instanceId**: `inst_d9c22079`
-- **to**: `120363182236641964@g.us` (grupo "Control Dispos SRT")
-- **text**: contenido de `/tmp/reporte.txt`
+Esto evita el sandbox egress de Anthropic: toda la cadena de envío corre del lado de Supabase.
 
-Si el MCP de WhatsApp no está disponible por alguna razón, fallback con curl a la edge function de Supabase:
+El skill solo tiene que **generar el reporte y meterlo en el INSERT del Paso 7**.
 
-```bash
-REPORTE=$(cat /tmp/reporte.txt)
-curl -sX POST "https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send" \
-  -H "Content-Type: application/json" \
-  --data "$(jq -n --arg text "$REPORTE" '{chatId:"120363182236641964@g.us", text:$text}')"
-```
+### Paso 7 — Guardar run en Supabase (dispara WhatsApp automáticamente)
 
-Verificar que el send devuelva `{status: "queued", jobId: ...}`. Si falla, reintentar 1 vez.
-
-### Paso 7 — Guardar run en Supabase (historial)
-
-Después de enviar por WhatsApp, guardar el run completo en la tabla `control_clausuras_runs` para tener histórico auditable:
+INSERT en `control_clausuras_runs`. Un trigger de Supabase (`trg_control_clausuras_wa`) detecta el INSERT, lee `reporte_texto` y lo manda por WhatsApp via pg_net + edge function `wa-send`.
 
 ```sql
 INSERT INTO control_clausuras_runs (
   total_clausuras, agendados_hoy, criticos, vencidos_sin_evento,
-  sin_caso_srt, agendados_ult_semana, whatsapp_jobid, errores, reporte_texto
+  sin_caso_srt, agendados_ult_semana, errores, reporte_texto
 ) VALUES (
   $total,
   $agendados_hoy_jsonb,
@@ -399,14 +388,21 @@ INSERT INTO control_clausuras_runs (
   $vencidos_jsonb,
   $sin_caso_jsonb,
   $agendados_ult_semana_jsonb,
-  $whatsapp_jobid,
   $errores_jsonb,
   $reporte_texto
 )
-RETURNING id, ejecutado_at;
+RETURNING id, ejecutado_at, whatsapp_jobid;
 ```
 
-Usar jsonb con los arrays del `/tmp/analisis.json`. El `reporte_texto` es el contenido completo del mensaje que se mandó por WhatsApp. `whatsapp_jobid` es el jobId devuelto por el MCP o la edge function (null si falló). `errores` captura cualquier problema de agendamiento del Paso 4.
+Usar jsonb con los arrays del `/tmp/analisis.json`. `reporte_texto` es el contenido completo del mensaje. Por default el trigger manda al grupo "Control Dispos SRT" (`wa_chat_id` tiene default `120363182236641964@g.us`). `errores` captura cualquier problema de agendamiento del Paso 4.
+
+Después del INSERT, el campo `whatsapp_jobid` queda como `pg_net:<N>`. Para confirmar que el envío salió OK:
+
+```sql
+SELECT id, status_code, error_msg FROM net._http_response ORDER BY id DESC LIMIT 1;
+```
+
+Un `status_code=200` con `error_msg=null` significa que WA ack. Si es distinto, ver `content` para diagnóstico.
 
 ### Paso 8 — Confirmar
 
