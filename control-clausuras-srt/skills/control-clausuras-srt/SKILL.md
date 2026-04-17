@@ -298,9 +298,9 @@ print(f'Total: {len(clausuras)} | Agendar: {len(to_create)} | Críticos: {len(cr
 
 Correr: `python3 /tmp/check.py`
 
-### Paso 4 — AUTO-AGENDAR faltantes
+### Paso 4 — AUTO-AGENDAR faltantes (con verificación)
 
-Para cada item en `to_create`, crear evento en Google Calendar:
+Para cada item en `to_create`, crear evento en Google Calendar con:
 
 - **calendarId**: `f98t26v6l01v4ss922e069rid0@group.calendar.google.com`
 - **summary**: `{nombre} - {srt} - VENCE APELAR CLAUSURA ({15 DIAS|90 DÍAS}) {ciudad}`
@@ -311,6 +311,12 @@ Para cada item en `to_create`, crear evento en Google Calendar:
 - **colorId**: `'11'` para 15d, `'10'` para 90d
 - **description**: `Fecha de dispo: DD/MM/YYYY — auto-agendado por control-clausuras-srt`
 - **timeZone**: `America/Argentina/Buenos_Aires`
+
+**IMPORTANTE** — no asumir que el create funcionó. Chequear cada response:
+- Si la respuesta trae `"status": "confirmed"` y un `"id"` → se creó OK, agregar a `/tmp/agendados_reales.json`
+- Si trae error (401, 403, rate limit, etc.) → agregar a `/tmp/errores_agendar.json` con `{srt, nombre, tipo, fecha, error}`
+
+Al final del paso, sobrescribir en `/tmp/analisis.json` el campo `to_create` con solo los agendados reales. Así el reporte y el log reflejan lo que efectivamente se creó, no lo que se intentó.
 
 ### Paso 5 — Generar reporte
 
@@ -367,13 +373,39 @@ curl -sX POST "https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send" \
 
 Verificar que el send devuelva `{status: "queued", jobId: ...}`. Si falla, reintentar 1 vez.
 
-### Paso 7 — Confirmar
+### Paso 7 — Guardar run en Supabase (historial)
+
+Después de enviar por WhatsApp, guardar el run completo en la tabla `control_clausuras_runs` para tener histórico auditable:
+
+```sql
+INSERT INTO control_clausuras_runs (
+  total_clausuras, agendados_hoy, criticos, vencidos_sin_evento,
+  sin_caso_srt, agendados_ult_semana, whatsapp_jobid, errores, reporte_texto
+) VALUES (
+  $total,
+  $agendados_hoy_jsonb,
+  $criticos_jsonb,
+  $vencidos_jsonb,
+  $sin_caso_jsonb,
+  $agendados_ult_semana_jsonb,
+  $whatsapp_jobid,
+  $errores_jsonb,
+  $reporte_texto
+)
+RETURNING id, ejecutado_at;
+```
+
+Usar jsonb con los arrays del `/tmp/analisis.json`. El `reporte_texto` es el contenido completo del mensaje que se mandó por WhatsApp. `whatsapp_jobid` es el jobId devuelto por el MCP o la edge function (null si falló). `errores` captura cualquier problema de agendamiento del Paso 4.
+
+### Paso 8 — Confirmar
 
 Reportar en la respuesta:
 - Total clausuras analizadas
-- Eventos agendados hoy (listado)
+- Eventos agendados hoy (listado real, no planeado)
+- Errores de agendamiento (si los hubo)
 - Críticos detectados
 - Vencidos sin evento
 - Sin caso SRT en app
-- Agendados la última semana (para control cruzado)
-- Status del envío por WhatsApp
+- Agendados la última semana
+- Status del envío por WhatsApp (jobId o error)
+- ID del run guardado en `control_clausuras_runs`
