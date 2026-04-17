@@ -68,6 +68,13 @@
       "source": "./monitoreo-expedientes",
       "description": "Monitoreo diario de expedientes judiciales: resumen IA, briefing automático, seguimiento de novedades y cobros",
       "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "control-clausuras-srt",
+      "version": "1.0.0",
+      "source": "./control-clausuras-srt",
+      "description": "Control semanal de Disposiciones de Clausura SRT: verifica Google Calendar, auto-agenda faltantes, reporta por WhatsApp al grupo Control Dispos SRT",
+      "author": { "name": "Matias Climent" }
     }
   ]
 }
