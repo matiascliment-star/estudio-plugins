@@ -56,6 +56,13 @@
       "author": { "name": "Matias Climent" }
     },
     {
+      "name": "impugnar-pericia-noe",
+      "version": "1.0.0",
+      "source": "./impugnar-pericia-noe",
+      "description": "Control e impugnacion de pericias medicas laborales - Modelo Noe (checklist estilo Noe)",
+      "author": { "name": "Matias Climent" }
+    },
+    {
       "name": "alegato-judicial",
       "version": "1.0.0",
       "source": "./alegato-judicial",

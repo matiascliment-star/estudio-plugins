@@ -1,0 +1,9 @@
+{
+  "name": "impugnar-pericia-noe",
+  "version": "1.0.0",
+  "description": "Control e impugnacion de pericias medicas laborales - Modelo Noe. Checklist exhaustiva del Estudio Garcia Climent basada en el estilo de Noe para controlar pericias medicas en expedientes laborales.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["pericia", "impugnacion", "noe", "baremo", "659", "laboral", "medica", "perito", "incapacidad", "pjn", "scba"]
+}
