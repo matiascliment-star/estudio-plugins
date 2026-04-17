@@ -203,8 +203,18 @@ def diff_dh(d1, d2):
         c += 1
     return sign * c
 
-SRT_RE = re.compile(r'\b(\d{4,7}/\d{2})\b')
+SRT_RE = re.compile(r'\b(\d{3,7})\s*[/\-]\s*(\d{2,4})\b')
 PLAZO_RE = re.compile(r'\((\d+)\s*D[IÍ]AS?\)', re.IGNORECASE)
+
+def normalizar_srt(texto):
+    """Extrae y normaliza el nro SRT a formato NNNN/YY desde variantes como
+    '337272/25', '337272 / 25', '337272-25', '337272/2025'."""
+    if not texto: return None
+    m = SRT_RE.search(texto)
+    if not m: return None
+    num, yr = m.group(1), m.group(2)
+    if len(yr) == 4: yr = yr[-2:]  # 2025 -> 25
+    return f"{num}/{yr}"
 
 clausuras = json.load(open('/tmp/clausuras.json'))
 events = json.load(open('/tmp/events.json'))
@@ -213,8 +223,8 @@ by_srt = {}
 for ev in events:
     s = (ev.get('summary') or '').upper()
     if 'CLAUSURA' not in s or 'VENCE' not in s: continue
-    ms = SRT_RE.search(s)
-    if not ms: continue
+    srt_norm = normalizar_srt(s)
+    if not srt_norm: continue
     mp = PLAZO_RE.search(s)
     if not mp: continue
     n = int(mp.group(1))
@@ -222,7 +232,7 @@ for ev in events:
     if not t: continue
     st = ev.get('start_date') or ev.get('start')
     if not st: continue
-    by_srt.setdefault(ms.group(1), []).append({
+    by_srt.setdefault(srt_norm, []).append({
         'tipo': t,
         'fecha': date.fromisoformat(st[:10]),
         'caba': 'CABA' in s,
@@ -243,7 +253,8 @@ for cl in clausuras:
     cm = cl.get('cm')
     f15 = sumar_dh(dispo, 15)
     f90 = sumar_dh(dispo, 90)
-    evs = by_srt.get(cl['srt'], [])
+    srt_norm = normalizar_srt(cl['srt']) or cl['srt']
+    evs = by_srt.get(srt_norm, [])
     e15 = [e for e in evs if e['tipo']=='15d']
     e90 = [e for e in evs if e['tipo']=='90d']
     caba = es_caba(cm)
