@@ -82,6 +82,13 @@
       "source": "./control-clausuras-srt",
       "description": "Control semanal de Disposiciones de Clausura SRT: verifica Google Calendar, auto-agenda faltantes, reporta por WhatsApp al grupo Control Dispos SRT",
       "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "agendar-comunicaciones-srt",
+      "version": "1.0.0",
+      "source": "./agendar-comunicaciones-srt",
+      "description": "Agenda diariamente Dictámenes Médicos e ITMs de Mi Ventanilla SRT con plazo de 3 días hábiles, reporta al grupo Claude SRT",
+      "author": { "name": "Matias Climent" }
     }
   ]
 }
