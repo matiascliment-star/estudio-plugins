@@ -43,7 +43,7 @@ Chequeo semanal (lunes 10:00 AR): verificar que toda Disposición de Clausura te
 
 ### Feriados AR
 
-El script del Paso 3 intenta bajar los feriados desde `https://api.argentinadatos.com/v1/feriados/{año}` para año anterior, actual y siguiente. Si la API falla (el sandbox de Anthropic suele bloquear egress a ese host), cae a un fallback hardcoded con los feriados AR 2025/2026 completos. **Para 2027 y posteriores, actualizar el set `FERIADOS_FALLBACK` en enero de cada año** si el fetch sigue siendo bloqueado.
+Los feriados están en la tabla **`feriados_ar`** de Supabase (project `wdgdbbcwcrirpnfdmykh`). Incluye feriados inamovibles, trasladables y puentes turísticos. Paso 1.5 los baja a `/tmp/feriados.json`. **Mantenimiento**: cada diciembre hacer INSERT del próximo año con datos de `https://api.argentinadatos.com/v1/feriados/{año}`.
 
 ## WORKFLOW
 
@@ -90,6 +90,18 @@ RETURNING c.numero_srt, c.nombre, c.comision_medica;
 ```
 
 **IMPORTANTE**: después de correr este UPDATE, **re-ejecutar el query del Paso 1** para obtener `clausuras.json` con los CMs actualizados. Sin este refresh, los casos rellenados quedarían como NULL en el análisis.
+
+### Paso 1.5 — Bajar feriados AR
+
+Query a Supabase para traer los feriados nacionales + días no laborables:
+
+```sql
+SELECT fecha::text FROM feriados_ar
+WHERE fecha BETWEEN (now() - interval '1 year')::date AND (now() + interval '1 year')::date
+ORDER BY fecha;
+```
+
+Guardar el resultado como `/tmp/feriados.json` con estructura `["2026-01-01", "2026-02-16", ...]` (array de strings YYYY-MM-DD).
 
 ### Paso 2 — Eventos de Calendar (con created)
 
@@ -143,43 +155,13 @@ EOF
 Crear `/tmp/check.py` con este contenido EXACTO:
 
 ```python
-import json, re, urllib.request
+import json, re
 from datetime import date, datetime, timedelta
 
-# Fallback hardcoded si la API no responde. Actualizar cuando salen nuevos feriados.
-FERIADOS_FALLBACK = {
-    '2025-12-08','2025-12-25',
-    '2026-01-01','2026-02-16','2026-02-17',
-    '2026-03-23','2026-03-24',
-    '2026-04-02','2026-04-03',
-    '2026-05-01','2026-05-25',
-    '2026-06-15','2026-06-20',
-    '2026-07-09','2026-07-10',
-    '2026-08-17','2026-10-12','2026-11-23','2026-12-07','2026-12-08','2026-12-25',
-}
-
-def fetch_feriados(year, timeout=10):
-    """Trae feriados desde api.argentinadatos.com. Incluye inamovibles, trasladables y puentes turísticos."""
-    try:
-        url = f'https://api.argentinadatos.com/v1/feriados/{year}'
-        req = urllib.request.Request(url, headers={'User-Agent': 'control-clausuras-srt/1.0'})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = json.loads(r.read())
-            return {item['fecha'] for item in data if item.get('fecha')}
-    except Exception as e:
-        print(f'[WARN] Feriados API falló para {year}: {e}. Usando fallback.', flush=True)
-        return None
-
-_hoy = date.today()
-FERIADOS_AR = set()
-# Traer año anterior, actual y siguiente (plazos 90d cruzan años y dispos ventana 180d)
-for y in (_hoy.year - 1, _hoy.year, _hoy.year + 1):
-    feriados = fetch_feriados(y)
-    if feriados:
-        FERIADOS_AR |= feriados
-if not FERIADOS_AR:
-    FERIADOS_AR = FERIADOS_FALLBACK
-    print('[WARN] Usando FERIADOS_FALLBACK', flush=True)
+# Feriados bajados de la tabla feriados_ar en Paso 1.5 → /tmp/feriados.json
+FERIADOS_AR = set(json.load(open('/tmp/feriados.json')))
+if len(FERIADOS_AR) < 30:
+    raise SystemExit(f'[ERROR] /tmp/feriados.json solo tiene {len(FERIADOS_AR)} feriados. Esperados >= 30 (3 años). Abortando.')
 CM_CABA = {'CABA','CM 10L'}
 CM_PCIA = ['LA PLATA','LOMAS','BAHIA','BAHÍA','TANDIL','SAN ISIDRO','ZARATE','ZÁRATE',
            'CAMPANA','MAR DEL PLATA','NECOCHEA','AZUL','LANUS','LANÚS','SAN MARTIN',
