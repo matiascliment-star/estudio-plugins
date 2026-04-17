@@ -43,9 +43,10 @@ El punto I.- en este caso dice primero "TRABE EMBARGO sobre las sumas depositada
 ## Datos variables por caso
 
 1. **Expediente**: carátula, número (ej: "CNT 033256/2022"), juzgado.
-2. **Monto a girar**: capital (honorarios) + IVA (21%).
+2. **Monto a girar — SIEMPRE DISCRIMINAR**: honorarios sin IVA + IVA 21% + total. En el texto del escrito (tanto en el VISTO como en la orden de transferir) deben aparecer las tres cifras. Si el total transferido viene con IVA incluido y no se sabe la descomposición exacta, dividir por 1,21 para obtener el neto.
 3. **Fechas de los depósitos** (ver movimientos PJN).
 4. **Variante** (A o B): si los fondos están en pago o en embargo (por queja pendiente u otro motivo).
+5. **Cuidado con imputación errónea de la demandada**: si la demandada depositó primero el capital y después los honorarios, verificar que no esté pretendiendo descontar parte del capital pagado como si hubiera sido honorarios. Solo contar como honorarios lo efectivamente depositado en esa partida.
 
 ## Flujo
 
