@@ -142,28 +142,32 @@ def generar(modelo_path, caratula, numero, placeholders, output_path):
     aplicar_formato_doc(doc)
 
     for i, bloque in enumerate(bloques):
-        # Primer bloque: OBJETO
-        if i == 0 and bloque.upper().startswith("OBJETO"):
-            agregar_parrafo(doc, bloque, sangria=SANGRIA_CUERPO,
+        # Primer bloque: TÍTULO (izquierda, sin sangría, mayúsculas + negrita + subrayado)
+        if i == 0:
+            agregar_parrafo(doc, bloque,
+                            alineacion=WD_ALIGN_PARAGRAPH.LEFT,
+                            sangria=None,
                             negrita=True, subrayado=True, mayusculas=True,
-                            space_after=6)
+                            space_after=18)
             continue
 
         # Encabezado al tribunal (ej "Sr. Juez:", "Excmo. Tribunal:")
         if bloque.endswith(":") and len(bloque) < 50 and "\n" not in bloque:
             agregar_parrafo(doc, bloque, alineacion=WD_ALIGN_PARAGRAPH.LEFT,
-                            space_before=6, space_after=6)
+                            sangria=None,
+                            space_before=6, space_after=12)
             continue
 
         # Cierre "SERÁ JUSTICIA."
         if "JUSTICIA" in bloque.upper() and len(bloque) < 40:
             agregar_parrafo(doc, bloque, sangria=SANGRIA_CUERPO,
-                            negrita=True, space_before=12)
+                            negrita=True, space_before=18, space_after=0)
             continue
 
         # "Proveer de conformidad,"
         if bloque.lower().startswith("proveer") or bloque.lower().startswith("provea"):
-            agregar_parrafo(doc, bloque, sangria=SANGRIA_CUERPO, space_before=6)
+            agregar_parrafo(doc, bloque, sangria=SANGRIA_CUERPO,
+                            space_before=12, space_after=6)
             continue
 
         # Primer párrafo con datos del letrado (único con "GARCÍA CLIMENT" como actor)
@@ -171,14 +175,16 @@ def generar(modelo_path, caratula, numero, placeholders, output_path):
             bloques_negrita = re.findall(r"\*\*(.+?)\*\*", bloque, flags=re.DOTALL)
             texto_limpio = re.sub(r"\*\*(.+?)\*\*", r"\1", bloque, flags=re.DOTALL)
             agregar_parrafo(doc, texto_limpio, sangria=SANGRIA_LETRADO,
-                            bloques_negrita=bloques_negrita, space_after=6)
+                            bloques_negrita=bloques_negrita,
+                            space_before=6, space_after=12)
             continue
 
-        # Cuerpo normal
+        # Cuerpo normal (espacio entre párrafos)
         bloques_negrita = re.findall(r"\*\*(.+?)\*\*", bloque, flags=re.DOTALL)
         texto_limpio = re.sub(r"\*\*(.+?)\*\*", r"\1", bloque, flags=re.DOTALL)
         agregar_parrafo(doc, texto_limpio, sangria=SANGRIA_CUERPO,
-                        bloques_negrita=bloques_negrita, space_after=6)
+                        bloques_negrita=bloques_negrita,
+                        space_before=6, space_after=12)
 
     doc.save(output_path)
     print(f"✅ Guardado: {output_path}")

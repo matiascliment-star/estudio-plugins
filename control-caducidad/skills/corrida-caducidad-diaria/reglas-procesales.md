@@ -32,13 +32,76 @@ Este archivo se inyecta en el prompt de **cada subagente** que analiza un expedi
 
 ## Interpretación de movimientos
 
-- `tipo='ESCRITO AGREGADO'` → escrito **de parte**, NO providencia del juzgado. El título (ej. "AUTOS PARA ALEGAR") es lo que la parte pidió.
-- `tipo='FIRMA DESPACHO'` → providencia del juzgado.
-- Si `FIRMA DESPACHO` tiene descripción ambigua, leer `texto_documento` del PDF correspondiente antes de decidir.
+### SIEMPRE leer el texto completo
+
+Cada fila de `movimientos_pjn` / `movimientos_judicial` tiene el contenido real del trámite o del escrito en el campo `texto_proveido` (Pcia/MEV) o `texto_documento` (PJN). **Nunca decidir solo con `descripcion` ni con `tipo`** — son etiquetas cortas; el contenido real está en el campo de texto.
+
+**Limpieza del prefijo de UI (MEV):** los textos de Pcia arrancan con una cabecera de la UI del portal:
+
+> `× Volver Informe × Resulta del proceso Aceptar × SI NO Texto del trámite Datos de la Causa …`
+
+o
+
+> `× Volver Informe × Resulta del proceso Aceptar × SI NO TEXTO Y DATOS DE LA NOTIFICACIÓN …`
+
+Antes de analizar, partir el texto por la primera aparición de `"Texto del trámite"` o `"TEXTO Y DATOS DE LA NOTIFICACIÓN"` y quedarse con lo que viene después (ahí está el cuerpo real del despacho/escrito, con fechas, firmantes y contenido sustantivo).
+
+### Tipos útiles vs ruido
+
+- `tipo='ESCRITO AGREGADO'` (PJN) o tipos específicos en Pcia como `ESCRITO ELECTRONICO`, `IMPUGNA DICTAMEN PERICIAL`, `ALEGATO - PRESENTA`, `CONTESTA AGRAVIOS`, `MANIFESTACION - FORMULA`, `INTIMACION - SOLICITA`, etc. → escritos **de parte**. El `texto_proveido` trae el cuerpo real del escrito.
+- `tipo='FIRMA DESPACHO'` (PJN) o en Pcia `DEMANDA - CONTESTADA / SE PROVEE`, `PRUEBA / SE PROVEE`, `AUTO DE APERTURA A PRUEBA`, `AGREGUESE Y TENGASE PRESENTE`, `SENTENCIA INTERLOCUTORIA`, `AUTOS PARA SENTENCIA`, etc. → providencias **del juzgado**.
+- Tipos ruidosos que solo son acuses administrativos (no analizar contenido): `PRESENTACION - (RECIBIDA)`, `PRESENTACION - (PENDIENTE)`, `PRESENTACION - (DILIGENCIADA)`, `PRESENTACION - (OBSERVADA)` → son acuse del portal, no contienen el escrito real. El contenido propio aparece bajo OTRO tipo del mismo día o cercano.
+
+### Si el texto del escrito no alcanza
+
+Si después de leer `texto_proveido` completo sigue sin haber suficiente contexto para decidir qué acción corresponde, marcar `modelo_aplica=NINGUNO` y en `contexto` describir lo que sí se sabe + indicar "revisar escrito completo en MEV". Nunca forzar un modelo sin certeza.
 
 ## Estados internos del sistema
 
 - `expedientes.estado` puede estar desactualizado. Siempre que el último movimiento real contradiga el estado, **priorizar los movimientos**.
+
+## Qué escrito corresponde — método objetivo
+
+**Paso 1 — Dos consultas a los movimientos:**
+```sql
+-- Último escrito nuestro agregado
+SELECT MAX(fecha) AS f_escrito FROM movimientos_pjn
+WHERE expediente_id = X AND tipo = 'ESCRITO AGREGADO';
+-- (para Pcia usar movimientos_judicial)
+
+-- Último proveído del tribunal
+SELECT MAX(fecha) AS f_despacho FROM movimientos_pjn
+WHERE expediente_id = X AND tipo = 'FIRMA DESPACHO';
+```
+
+**Paso 2 — Comparar fechas y decidir:**
+
+### Caso A — `f_escrito > f_despacho` (nuestro último escrito es posterior al último despacho)
+→ Hay escrito nuestro sin proveer → **`pronto-despacho`**.
+
+### Caso B — `f_escrito <= f_despacho` (ya hay despacho posterior a nuestro último escrito)
+→ Nuestro escrito ya fue proveído. Leer el contenido del último FIRMA DESPACHO:
+- Si dice "BREVEDAD" / "téngase presente" / "autos en despacho" y el tribunal sigue sin cumplir lo sustantivo → **`reitera-pedido`**.
+- Si dice "AUTOS PARA SENTENCIA" / "PASE AL ACUERDO" y ya pasó tiempo sin sentencia → **`solicita-sentencia`**.
+- Si el despacho resolvió sustantivamente lo pedido → nada, el trámite avanzó.
+
+### Caso C — No hay escritos nuestros previos
+→ Si el tribunal por sí mismo llamó autos y está en mora → **`solicita-sentencia`**. Si no hay autos llamados tampoco → evaluar qué otro escrito procede.
+
+**Regla de oro:** nunca sugerir `pronto-despacho` si `f_escrito <= f_despacho`. La comparación de fechas es binaria y objetiva.
+
+## Encabezado, tratamiento y matrícula según fuero e instancia
+
+Para placeholders `{{encabezado}}`, `{{tratamiento}}` y `{{matricula}}`:
+
+| Fuero / Instancia | `{{encabezado}}` | `{{tratamiento}}` | `{{matricula}}` |
+|---|---|---|---|
+| CABA 1ra instancia | `Sr. Juez:` | `V.S.` | `T° 97 F° 16 C.P.A.C.F.` |
+| CABA Cámara | `Excmo. Tribunal:` | `V.E.` | `T° 97 F° 16 C.P.A.C.F.` |
+| Provincia 1ra instancia (TT) | `Excmo. Tribunal:` | `V.E.` | `T° 46 F° 393 C.A.S.I.` |
+| Provincia Cámara / SCBA | `Excmo. Tribunal:` | `V.E.` | `T° 46 F° 393 C.A.S.I.` |
+
+Los tribunales laborales de Provincia son colegiados (Tribunal del Trabajo), por eso "Excmo. Tribunal" y "V.E." desde primera instancia. La matrícula CABA es del CPACF (97/16), la de Provincia del CASI (46/393) — nunca mezclar.
 
 ## Cuándo NO sugerir impulso
 
