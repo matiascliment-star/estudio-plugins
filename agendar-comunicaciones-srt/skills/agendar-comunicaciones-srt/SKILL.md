@@ -163,9 +163,17 @@ def proc_constancia_orden_estudio(c):
         localidad = (m_loc.group(1).strip() if m_loc else '')
         dir_completa = f"{direccion}, {localidad}".strip(', ')
         dia_sem = DIAS_SEM[fecha_ev.weekday()]
-        saludo = f"Hola {primer_nombre(c['nombre_actor'])}!\n" if c.get('nombre_actor') else ''
-        aviso = (f"{saludo}*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
-                 f"para *{estudios}*.  *DIRECCION:* {dir_completa or '(ver PDF)'}")
+        pn = primer_nombre(c['nombre_actor']) if c.get('nombre_actor') else ''
+        saludo = f"Hola {pn}!" if pn else "Hola!"
+        aviso = (
+            f"{saludo} Te avisamos que la SRT te ordenó un *estudio médico* "
+            f"en el marco de tu expediente. Tenés que ir a hacértelo:\n\n"
+            f"🩺 Estudio: {estudios}\n"
+            f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
+            f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
+            f"Llevá tu DNI. Recordá que el estudio *no te lo pueden cobrar*. "
+            f"Si no podés ir avisanos por acá con tiempo así lo reprogramamos."
+        )
         return {
             'fecha_evento': fecha_ev,
             'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- ESTUDIO SRT {hora_str} {estudios[:60]}",
@@ -198,9 +206,16 @@ def proc_citacion_examen(c):
     m_tipo = re.search(r'fin de realizar\s+la?\s+([^\.\n]+)', t, re.I)
     tipo_estudio = (m_tipo.group(1).strip() if m_tipo else 'Examen Físico').rstrip('.').strip()
     dia_sem = DIAS_SEM[fecha_ev.weekday()]
-    saludo = f"Hola {primer_nombre(c['nombre_actor'])}!\n" if c.get('nombre_actor') else ''
-    aviso = (f"{saludo}*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
-             f"para *{tipo_estudio}*.  *DIRECCION:* {direccion}")
+    pn = primer_nombre(c['nombre_actor']) if c.get('nombre_actor') else ''
+    saludo = f"Hola {pn}!" if pn else "Hola!"
+    aviso = (
+        f"{saludo} Te avisamos que la SRT (Superintendencia de Riesgos del Trabajo) "
+        f"te citó a *{tipo_estudio}* para avanzar con tu expediente.\n\n"
+        f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
+        f"📍 {direccion}\n\n"
+        f"Acordate de llevar tu DNI y, si usás, anteojos o audífonos.\n"
+        f"Si no podés ir avisanos por acá con tiempo así vemos cómo seguimos."
+    )
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- {tipo_estudio.upper()} SRT {hora_str}",
@@ -216,9 +231,16 @@ def proc_citacion_homologacion(c):
     m_link = re.search(r'https://go\.srt\.gob\.ar/\S+', t)
     link = m_link.group(0) if m_link else ''
     dia_sem = DIAS_SEM[fecha_ev.weekday()]
-    saludo = f"Hola {primer_nombre(c['nombre_actor'])}!\n" if c.get('nombre_actor') else ''
-    aviso = (f"{saludo}*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
-             f"*Audiencia Homologación SRT* (virtual Teams): {link}".strip())
+    pn = primer_nombre(c['nombre_actor']) if c.get('nombre_actor') else ''
+    saludo = f"Hola {pn}!" if pn else "Hola!"
+    aviso = (
+        f"{saludo} Te avisamos que tenés una *audiencia virtual* ante el Servicio de "
+        f"Homologación de la SRT. Ahí se evalúa un posible acuerdo en tu expediente.\n\n"
+        f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
+        f"💻 Por Microsoft Teams: {link}\n\n"
+        f"Conectate unos minutos antes, con buena señal y el DNI a mano. "
+        f"Cualquier cosa avisanos por acá."
+    )
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- AUDIENCIA HOMOLOGACION SRT {hora_str} (Teams)",
