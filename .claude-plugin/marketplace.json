@@ -89,6 +89,13 @@
       "source": "./agendar-comunicaciones-srt",
       "description": "Agenda diariamente Dictámenes Médicos e ITMs de Mi Ventanilla SRT con plazo de 3 días hábiles + alerta al grupo Claude SRT para Constancias de Orden de Estudio y Solicitudes de Historia Clínica que requieren revisión manual del PDF",
       "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "control-caducidad",
+      "version": "1.0.0",
+      "source": "./control-caducidad",
+      "description": "Corrida diaria de control de caducidad de instancia (L-V 7am AR): selecciona top 20 CABA + top 20 Pcia más urgentes, analiza con subagentes, genera borradores DOCX de escritos de fórmula en OneDrive y manda 4 WhatsApp (uno por chica: Eliana, Mara, Kuki, Paula) + resumen ejecutivo a Matías con los CRÍTICOS del día",
+      "author": { "name": "Matias Climent" }
     }
   ]
 }
