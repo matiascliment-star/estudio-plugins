@@ -62,12 +62,10 @@ SELECT m.id AS comunicacion_id,
   (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_notif,
   m.tipo_comunicacion,
   c.nombre AS nombre_actor,
-  cl.telefono AS cliente_tel,
-  cl.nombre AS cliente_nombre,
+  c.wa_chat_id AS grupo_cliente_wa,  -- chat_id del grupo WhatsApp con el cliente
   a.texto_extraido
 FROM comunicaciones_miventanilla m
 LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
-LEFT JOIN clientes cl ON cl.id = c.cliente_id
 LEFT JOIN adjuntos_miventanilla a ON a.comunicacion_id = m.id
 WHERE m.tipo_comunicacion IN (
     'Notificación de Dictamen Médico',
@@ -226,27 +224,26 @@ SET agendado_en_calendar_at = now(),
 WHERE id = $comunicacion_id;
 ```
 
-### Paso 5 — Avisos al cliente (SOLO citaciones)
+### Paso 5 — Avisos al grupo del cliente (SOLO citaciones)
 
-Para items que tengan `aviso_cliente` no-null Y `cliente_tel` no-null:
+Para items que tengan `aviso_cliente` no-null Y `grupo_cliente_wa` no-null, mandar al **grupo de WhatsApp compartido con el cliente** (no al teléfono individual). El grupo es del estilo "Apellido Nombre - Abogados Matías".
 
-- INSERT en tabla `control_clausuras_runs` o nueva row separada, pero usando el trigger pg_net para disparar WA
-- Alternativa más simple: usar `wa-send` via edge function llamada con pg_net directo:
+Usar `pg_net.http_post` contra la edge function `wa-send` (que internamente llama al MCP WA Railway):
 
 ```sql
 SELECT net.http_post(
   url := 'https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send',
   headers := '{"Content-Type": "application/json"}'::jsonb,
   body := jsonb_build_object(
-    'chatId', $cliente_telefono,
+    'chatId', $grupo_cliente_wa,   -- ej: '120363398764842372@g.us'
     'text', $aviso_cliente_text
   )
 );
 ```
 
-Nota: el `cliente_tel` tiene que estar en formato WhatsApp (ej: `5491123456789`). Si empieza con `+` o tiene espacios, normalizar a solo dígitos.
+Verificar en `net._http_response` que el status sea 200 antes de dar por exitoso el envío.
 
-Si no hay `cliente_tel` → incluir en el reporte del grupo con flag "sin tel, avisar manual".
+Si **no hay `grupo_cliente_wa`** para el caso (no se encontró match automático por nombre) → incluir en el reporte del grupo Claude SRT con flag "sin grupo WA del cliente, avisar manual". Mara/Noe pueden actualizar manualmente la columna `casos_srt.wa_chat_id` cuando encuentren el grupo correcto.
 
 ### Paso 6 — Generar reporte
 
@@ -256,12 +253,12 @@ from datetime import date
 
 procesadas = json.load(open('/tmp/procesadas.json'))
 errores = json.load(open('/tmp/errores_proceso.json'))
-sin_tel_citacion = [p for p in procesadas if p.get('aviso_cliente') and not p.get('cliente_tel')]
-avisos_enviados = [p for p in procesadas if p.get('aviso_cliente') and p.get('cliente_tel') and p.get('aviso_ok')]
+sin_grupo_citacion = [p for p in procesadas if p.get('aviso_cliente') and not p.get('grupo_cliente_wa')]
+avisos_enviados = [p for p in procesadas if p.get('aviso_cliente') and p.get('grupo_cliente_wa') and p.get('aviso_ok')]
 
 hoy = date.today()
 L = [f'📋 *AGENDAR COMUNICACIONES SRT* — {hoy.strftime("%d/%m/%Y")}']
-L.append(f'Agendadas: {len(procesadas)} | Avisos WA clientes: {len(avisos_enviados)} | Sin tel: {len(sin_tel_citacion)} | Errores: {len(errores)}')
+L.append(f'Agendadas: {len(procesadas)} | Avisos WA clientes: {len(avisos_enviados)} | Sin grupo: {len(sin_grupo_citacion)} | Errores: {len(errores)}')
 
 # Listado por tipo
 def grupo(tipo):
@@ -284,20 +281,20 @@ examen = grupo('Notificación de Citación')
 if examen:
     L.append('\n🏥 *CITACIÓN EXAMEN FÍSICO — agendadas + avisos cliente*')
     for p in examen:
-        mk = '' if p.get('aviso_ok') else (' ⚠️sin tel' if not p.get('cliente_tel') else ' 🔴aviso fallo')
+        mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
         L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')}{mk}")
 
 homo = grupo('Notificación de Citación al Servicio de Homologación')
 if homo:
     L.append('\n⚖️ *AUDIENCIA HOMOLOGACIÓN — agendadas + avisos cliente*')
     for p in homo:
-        mk = '' if p.get('aviso_ok') else (' ⚠️sin tel' if not p.get('cliente_tel') else ' 🔴aviso fallo')
+        mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
         L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')}{mk}")
 
-if sin_tel_citacion:
-    L.append('\n📞 *CITACIONES SIN TELÉFONO DEL CLIENTE — avisar manual*')
-    for s in sin_tel_citacion:
-        L.append(f"• {s['nombre_actor']} ({s['srt']})")
+if sin_grupo_citacion:
+    L.append('\n📞 *CITACIONES SIN GRUPO WA DEL CLIENTE — avisar manual*')
+    for s in sin_grupo_citacion:
+        L.append(f"• {s['nombre_actor']} ({s['srt']}) — matchear grupo con casos_srt.wa_chat_id")
 
 if errores:
     L.append('\n🔴 *ERRORES DE PROCESAMIENTO*')
