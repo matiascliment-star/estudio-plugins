@@ -216,8 +216,8 @@ def proc_citacion_examen(c):
         f"te citó a *{tipo_estudio}* para avanzar con tu expediente.\n\n"
         f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
         f"📍 {direccion}\n\n"
-        f"⚠️ *Importante*: antes de entrar comunicate con nosotros por acá así "
-        f"te indicamos qué decir y qué no. Llevá tu DNI y, si usás, anteojos o audífonos.\n\n"
+        f"⚠️ *Importante*: antes de asistir comunicate con nosotros por acá para "
+        f"recibir el asesoramiento previo. Llevá tu DNI y, si usás, anteojos o audífonos.\n\n"
         f"Si no podés ir avisanos con tiempo así vemos cómo seguimos."
     )
     return {
@@ -242,8 +242,8 @@ def proc_citacion_homologacion(c):
         f"Homologación de la SRT. Ahí se evalúa un posible acuerdo en tu expediente.\n\n"
         f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
         f"💻 Por Microsoft Teams: {link}\n\n"
-        f"⚠️ *Importante*: antes de conectarte comunicate con nosotros por acá así "
-        f"te indicamos qué decir y qué no. Conectate unos minutos antes, con buena señal "
+        f"⚠️ *Importante*: antes de conectarte comunicate con nosotros por acá para "
+        f"recibir el asesoramiento previo. Conectate unos minutos antes, con buena señal "
         f"y el DNI a mano."
     )
     return {
