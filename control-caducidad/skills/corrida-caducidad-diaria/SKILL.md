@@ -79,34 +79,53 @@ ranked AS (
 SELECT id, numero, caratula, jurisdiccion, estado, instancia_actual,
        fecha_ref, plazo, (CURRENT_DATE - fecha_ref) AS diff_dias, dr,
        mev_idc, mev_ido, link_causa, resumen_ia, onedrive_id, onedrive_url
-FROM ranked WHERE rn <= 20 ORDER BY jurisdiccion, rn;
+FROM ranked WHERE rn <= CASE WHEN jurisdiccion='CABA' THEN 20 ELSE 30 END
+ORDER BY jurisdiccion, rn;
 ```
 
-**Dedup:** si dos filas tienen el mismo `numero`, quedarse con el primero. Si tras dedup hay <20 en alguna jurisdicción, traer los siguientes con otra query hasta completar.
+**Dedup:** si dos filas tienen el mismo `numero`, quedarse con el primero. Si tras dedup hay <20 CABA o <30 Pcia, traer los siguientes con otra query hasta completar.
 
-### Fase 2: Lanzar 40 subagentes en tandas paralelas de 8
+### Fase 2: Lanzar 50 subagentes Opus en tandas paralelas de 10
 
-Cada subagente Sonnet recibe:
+Cada subagente **Opus 4.7** recibe:
 - Metadata del expediente (id, numero, caratula, jurisdiccion, estado, instancia, dr, plazo, fecha_ref).
 - Link a PJN o mev_idc/mev_ido según corresponda.
-- `resumen_ia` completo.
-- El contenido de `reglas-procesales.md` inyectado en el prompt.
-- Instrucción de devolver JSON estructurado.
+- `resumen_ia` completo del expediente (del campo `expedientes.resumen_ia`).
+- El contenido completo de `reglas-procesales.md` inyectado en el prompt.
+- Instrucción de devolver JSON estructurado con análisis completo.
 
-**Prompt template del subagente** (ver `prompt-subagente.md`).
+**El subagente debe:**
 
-El subagente debe:
-1. Leer últimos 15-20 movimientos de Supabase.
-2. Si algún movimiento de tipo `FIRMA DESPACHO` tiene descripción ambigua, leer el `texto_documento` del PDF.
-3. Aplicar las reglas procesales.
-4. Decidir `tipo_impulso` + `urgencia_real` + `critico` (bool).
-5. Si el tipo de impulso es "de fórmula" y tiene urgencia alta, generar el DOCX ahí mismo.
-6. Devolver JSON con:
-   - `contexto`: 2-3 oraciones contándole a la chica **qué pasó** en el expediente (último hito, fecha, por qué está frenado). Sirve para que la empleada entienda la lógica del caso sin leer movimientos.
-   - `accion_sugerida`: una frase concreta de **qué hay que pedir** al juzgado.
-   - `texto_sugerido`: párrafo tipo escrito judicial para copy-paste (~100-200 palabras).
-   - `link_borrador_onedrive` / `link_borrador_mev`: si se generó.
-   - `urgencia_real`, `critico`, `tipo_impulso`.
+1. Leer últimos **30 movimientos** de Supabase (no 15), incluyendo `texto_proveido` (Pcia) o `texto_documento` (PJN) **completo** (no solo descripción).
+2. Aplicar cleanup del prefijo de UI del MEV antes de analizar contenido (ver reglas-procesales.md).
+3. Aplicar el método objetivo `f_escrito` vs `f_despacho` para clasificar el escrito que corresponde.
+4. Si es etapa probatoria y hay dudas, traer también demanda / contestación / ofrecimiento de prueba / pericias presentadas (consultando `texto_proveido` de los movs relevantes).
+5. Generar el DOCX si el tipo de impulso es de fórmula y hay certeza. Si no hay certeza, `modelo_aplica=NINGUNO` y marcar para revisión manual.
+
+**JSON de salida (análisis estructurado):**
+
+```json
+{
+  "expediente_id": 123,
+  "numero": "CNT ...",
+  "caratula_corta": "APELLIDO c/ DEMANDADA",
+  "dr": 45,
+  "estado_procesal": "2-3 oraciones: dónde está realmente el expediente (no el campo estado del sistema — lo real según movs)",
+  "prueba_producida": ["pericia médica (DD/MM) — % incap. o conclusión", "testimonial (DD/MM) — testigos declararon", ...],
+  "prueba_pendiente": ["oficio a ANSES del DD/MM sin respuesta", "perito contador sin informe", ...],
+  "obstaculo_actual": "quién está en mora: tribunal / perito / demandada / nosotros, y desde cuándo",
+  "estrategia_sugerida": ["acción 1 prioritaria", "acción 2", "acción 3"],
+  "accion_inmediata": "la que corresponde HOY — la que genera el DOCX",
+  "tipo_impulso": "pronto-despacho | intimar-pago | ... | NO REQUIERE | REVISAR MANUAL",
+  "urgencia_real": "alta|media|baja|no_requiere",
+  "critico": true|false,
+  "modelo_aplica": "pronto-despacho|intimar-pago|...|NINGUNO",
+  "placeholders_modelo": {...} | null,
+  "texto_sugerido_corto": "2-3 oraciones para el WhatsApp, no para el DOCX"
+}
+```
+
+El `estado_procesal`, `prueba_producida`, `prueba_pendiente`, `obstaculo_actual` y `estrategia_sugerida` se usan en el WhatsApp para dar contexto profundo a la chica. El `accion_inmediata` es lo que le pide que haga hoy.
 
 **Tipos de fórmula** (auto-generar DOCX):
 - `pronto_despacho`
@@ -146,7 +165,7 @@ Los subagentes usan `scripts/generar_escrito.py` que:
 
 ### Fase 5: Armado y envío de WhatsApp
 
-**4 mensajes por chica + 1 mensaje ejecutivo a Matías.**
+**5 mensajes por chica (Eliana, Mara, Kuki, Paula, Clara) + 1 mensaje ejecutivo a Matías.**
 
 Estructura del mensaje por chica:
 
@@ -162,14 +181,24 @@ _Corrida {fecha} · {N} expedientes_
 *1.* {CARATULA_CORTA} — {NUMERO} · dr={dr}
 {EMOJI} {tipo_impulso_legible}
 
-📌 *Qué pasó:* {contexto — 2-3 oraciones explicando la lógica del expediente}
+📌 *Estado:* {estado_procesal — dónde está realmente el expediente}
 
-✏️ *Qué hay que pedir:* {accion_sugerida — frase concreta}
+🔬 *Prueba producida:* {prueba_producida — bullets con fechas y conclusiones}
+
+⏳ *Prueba pendiente:* {prueba_pendiente — qué falta y desde cuándo}
+
+🎯 *Obstáculo:* {obstaculo_actual — quién está en mora}
+
+🧭 *Estrategia:* {estrategia_sugerida — 2-3 pasos priorizados}
+
+✏️ *Hoy:* {accion_inmediata — el paso concreto para hoy}
 
 📎 Borrador: {link_onedrive | link_mev | "—"}
 ```
 
-**Regla de oro:** que la chica pueda leer solo el bloque de un expediente y entender sin ambigüedad qué presentar y por qué, sin tener que abrir el expediente para averiguarlo.
+Cuando un campo no aplica al estado del expediente (ej. ejecución no tiene "prueba pendiente"), se omite ese bloque en el mensaje.
+
+**Regla de oro:** que la chica pueda leer solo el bloque de un expediente y entender sin abrir el expediente todo: dónde está, qué prueba falta, quién está en mora, qué estrategia conviene, y qué hacer hoy.
 
 Estructura del mensaje ejecutivo a Matías:
 
@@ -237,6 +266,7 @@ Eliana → 549XX...
 Mara   → 549XX...
 Kuki   → 549XX...
 Paula  → 549XX...
+Clara  → 549XX...
 ```
 
 Guardar en `reference_caducidad_asignaciones.md` en memoria.
@@ -255,22 +285,26 @@ Trigger diario **7:00 AR** (= 10:00 UTC) de **lunes a viernes**. Crear con skill
 
 ## Resumen para el agente orquestador (Opus 4.7)
 
-1. Leer `reglas-procesales.md` y cargarlo a memoria local.
-2. Ejecutar query de Fase 1, deduplicar, obtener 40 filas.
-3. Asignar por orden: top 1-10 CABA a Eliana, 11-20 CABA a Mara, 1-10 Pcia a Kuki, 11-20 Pcia a Paula.
-4. Lanzar 40 subagentes en **tandas de 8 paralelos**. Cada subagente devuelve JSON.
+1. Leer `reglas-procesales.md` y cargarlo a memoria local — se inyecta literal en cada subagente.
+2. Ejecutar query de Fase 1, deduplicar, obtener 20 CABA + 30 Pcia = 50 filas.
+3. Asignar por orden:
+   - CABA top 1–10 → Eliana, 11–20 → Mara.
+   - Pcia top 1–10 → Kuki, 11–20 → Paula, 21–30 → Clara.
+4. Lanzar **50 subagentes Opus 4.7** en **tandas de 10 paralelos**. Cada subagente devuelve JSON con análisis estructurado.
 5. Consolidar resultados. Identificar CRÍTICOS.
-6. Generar 4 mensajes WA + 1 mensaje resumen Matías.
-7. Enviar con `mcp__whatsapp__wa_send_text` + `mcp__whatsapp__wa_send_document` si hay adjunto.
+6. Generar **5 mensajes WA** (uno por chica) + 1 mensaje resumen Matías.
+7. Enviar con edge function `wa-send` vía `pg_net.http_post`.
 8. Insertar filas en `caducidad_corridas`.
-9. Reportar al usuario (o al scheduled trigger) el total procesado.
+9. Reportar al scheduled trigger el total procesado.
 
 ## Tiempo esperado
 
 - Query Supabase: 2 seg
-- 40 subagentes en tandas de 8 × ~75 seg promedio = ~6 min
+- 50 subagentes Opus en tandas de 10 × ~120 seg promedio (análisis profundo) = **5 tandas × 2 min = 10 min**
 - Generación DOCX + uploads: integrado en cada subagente
-- 5 WA envíos paralelos: 5 seg
-- **Total: 7-10 min end-to-end.**
+- 6 WA envíos: 5 seg
+- **Total estimado: 12-15 min end-to-end.**
 
-Si algún subagente timeout (90 seg), reintentar 1 vez; si falla de nuevo, marcar en `caducidad_corridas.razon = "REVISAR MANUAL: subagente falló"` y seguir.
+Corrida diaria a las **7:00 AR** — termina ~7:15, las chicas llegan a las 8 y ya lo tienen listo.
+
+Si algún subagente timeout (180 seg), reintentar 1 vez; si falla de nuevo, marcar en `caducidad_corridas` con `razon="REVISAR MANUAL: subagente falló"` y seguir.
