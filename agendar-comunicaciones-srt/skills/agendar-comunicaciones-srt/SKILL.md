@@ -83,12 +83,11 @@ WHERE m.tipo_comunicacion IN (
   )
   AND COALESCE(m.estado, '') = ''            -- SIN procesar por las chicas en la app (rojas !)
   AND m.agendado_en_calendar_at IS NULL      -- SIN procesar por Claude en corridas anteriores
-  -- Ventana: días calendario anteriores completos (día-2 y día-1).
+  -- Ventana: hoy + ayer + anteayer (días calendario completos AR).
   -- Ejemplo: si corre el 18/04 a las 9am, procesa TODAS las notificaciones
-  -- del 16/04 y 17/04 completos (no importa la hora). Cubre ayer y anteayer
-  -- enteros, incluso si corre temprano en la mañana.
+  -- del 16/04, 17/04 y 18/04 completas. Cubre hoy + 2 días atrás.
   AND (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-      BETWEEN (current_date - interval '3 days')::date AND (current_date - interval '1 day')::date
+      BETWEEN (current_date - interval '2 days')::date AND current_date
 ORDER BY m.fecha_notificacion ASC;
 ```
 
