@@ -83,9 +83,12 @@ WHERE m.tipo_comunicacion IN (
   )
   AND COALESCE(m.estado, '') = ''            -- SIN procesar por las chicas en la app (rojas !)
   AND m.agendado_en_calendar_at IS NULL      -- SIN procesar por Claude en corridas anteriores
-  -- Ventana: últimas 48 horas (cubre día anterior + margen para fines de semana)
-  -- El skill corre L-V 9am. Lunes cubre desde viernes ~17hs ok.
-  AND m.fecha_notificacion >= (now() - interval '48 hours')
+  -- Ventana: días calendario anteriores completos (día-2 y día-1).
+  -- Ejemplo: si corre el 18/04 a las 9am, procesa TODAS las notificaciones
+  -- del 16/04 y 17/04 completos (no importa la hora). Cubre ayer y anteayer
+  -- enteros, incluso si corre temprano en la mañana.
+  AND (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+      BETWEEN (current_date - interval '3 days')::date AND (current_date - interval '1 day')::date
 ORDER BY m.fecha_notificacion ASC;
 ```
 
@@ -197,7 +200,8 @@ def proc_constancia_orden_estudio(c):
             f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
             f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
             f"{aviso_previo}"
-            f"Llevá tu DNI. Si no podés ir avisanos por acá con tiempo así lo reprogramamos."
+            f"Llevá tu DNI. *Confirmanos por acá si vas a poder ir.* "
+            f"Si no podés, avisanos con tiempo así lo reprogramamos."
         )
         return {
             'fecha_evento': fecha_ev,
@@ -241,7 +245,7 @@ def proc_citacion_examen(c):
         f"📍 {direccion}\n\n"
         f"⚠️ *Importante*: antes de asistir comunicate con nosotros por acá para "
         f"recibir el asesoramiento previo. Llevá tu DNI y, si usás, anteojos o audífonos.\n\n"
-        f"Si no podés ir avisanos con tiempo así vemos cómo seguimos."
+        f"*Confirmanos por acá si vas a poder ir.* Si no podés, avisanos con tiempo así vemos cómo seguimos."
     )
     return {
         'fecha_evento': fecha_ev,
@@ -268,7 +272,8 @@ def proc_citacion_homologacion(c):
         f"💻 Por Microsoft Teams: {link}\n\n"
         f"⚠️ *Importante*: antes de conectarte comunicate con nosotros por acá para "
         f"recibir el asesoramiento previo. Conectate unos minutos antes, con buena señal "
-        f"y el DNI a mano."
+        f"y el DNI a mano.\n\n"
+        f"*Confirmanos por acá que vas a poder asistir.*"
     )
     return {
         'fecha_evento': fecha_ev,
@@ -481,9 +486,11 @@ if homo:
         L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')}{mk}")
 
 if sin_grupo_citacion:
-    L.append('\n📞 *CITACIONES SIN GRUPO WA DEL CLIENTE — avisar manual*')
+    L.append('\n📞 *CITACIONES SIN GRUPO WA DEL CLIENTE — copiar y pegar al cliente*')
+    L.append('_(Mara: copiá el mensaje de cada uno y pegáselo al cliente por WA. Después matcheá el grupo en `casos_srt.wa_chat_id` para que la próxima salga sola.)_')
     for s in sin_grupo_citacion:
-        L.append(f"• {s['nombre_actor']} ({s['srt']}) — matchear grupo con casos_srt.wa_chat_id")
+        L.append(f"\n———— *{s['nombre_actor']}* ({s['srt']}) ————")
+        L.append(s['aviso_cliente'])
 
 if errores:
     L.append('\n🔴 *ERRORES DE PROCESAMIENTO*')
