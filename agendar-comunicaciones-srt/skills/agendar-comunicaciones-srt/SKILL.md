@@ -83,9 +83,9 @@ WHERE m.tipo_comunicacion IN (
   )
   AND COALESCE(m.estado, '') = ''            -- SIN procesar por las chicas en la app (rojas !)
   AND m.agendado_en_calendar_at IS NULL      -- SIN procesar por Claude en corridas anteriores
-  -- Ventana: solo las del día anterior (+ margen de madrugada)
-  -- El skill corre L-V 9am, procesa lo de las últimas ~30 horas
-  AND m.fecha_notificacion >= (now() - interval '30 hours')
+  -- Ventana: últimas 48 horas (cubre día anterior + margen para fines de semana)
+  -- El skill corre L-V 9am. Lunes cubre desde viernes ~17hs ok.
+  AND m.fecha_notificacion >= (now() - interval '48 hours')
 ORDER BY m.fecha_notificacion ASC;
 ```
 
