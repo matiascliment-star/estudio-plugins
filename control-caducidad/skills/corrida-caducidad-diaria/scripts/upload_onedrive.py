@@ -124,15 +124,17 @@ def main():
     ap.add_argument("--onedrive-id", required=True, help="onedrive_id del expediente (item padre)")
     ap.add_argument("--subpath", required=True, help="ruta relativa dentro de la carpeta del exp")
     ap.add_argument("--file", required=True, help="path local del archivo a subir")
+    ap.add_argument("--refresh-token", help="refresh_token directo (si no viene, se busca en Supabase con SUPABASE_SERVICE_KEY)")
     args = ap.parse_args()
 
     if not os.path.exists(args.file):
         print(f"❌ Archivo no existe: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    refresh = get_refresh_token()
+    refresh = args.refresh_token or get_refresh_token()
     access, nuevo_refresh = refresh_access_token(refresh)
-    actualizar_refresh_si_cambia(nuevo_refresh)
+    if not args.refresh_token:
+        actualizar_refresh_si_cambia(nuevo_refresh)
 
     result = subir(args.file, args.onedrive_id, args.subpath, access)
     out = {"webUrl": result.get("webUrl"), "id": result.get("id"), "name": result.get("name")}
