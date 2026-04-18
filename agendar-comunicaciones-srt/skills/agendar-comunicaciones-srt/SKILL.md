@@ -115,12 +115,50 @@ def proc_dictamen_itm(c, tipo_label):
     }
 
 def proc_constancia_orden_estudio(c):
+    """Dos variantes según contenido del PDF:
+    1) Intimación al abogado/trabajador (pide describir accidente + docs) → agenda 5 hábiles
+    2) Orden de estudio médico al cliente (con fecha/hora/dirección prestador) → aviso al grupo + agenda fecha
+    """
+    t = c.get('texto_extraido') or ''
     notif = date.fromisoformat(c['fecha_notif'])
+
+    # Caso 2: orden de estudio real al cliente
+    if 'Fecha/Hora de Prestación' in t or 'Fecha/Hora de Prestac' in t:
+        m_fh = re.search(r'Fecha/Hora de Prestac[^:]*:\s*(\d{2}/\d{2}/\d{4})\s*[-\s]+\s*(\d{1,2}[:.]?\d{2})', t)
+        if not m_fh: return None
+        fecha_str = m_fh.group(1)
+        hora_str = m_fh.group(2).replace('.', ':')
+        fecha_ev = date(*[int(x) for x in reversed(fecha_str.split('/'))])
+        # Estudios solicitados (texto después de "ESTUDIOS SOLICITADOS" hasta "Fecha/Hora")
+        m_est = re.search(r'ESTUDIOS\s+SOLICITADOS[^\n]*\n(.*?)(?:Fecha/Hora|a\s*Fecha/Hora)', t, re.S | re.I)
+        estudios_raw = (m_est.group(1).strip() if m_est else '')
+        estudios = re.sub(r'\s+', ' ', estudios_raw)[:180]
+        # Dirección: "Lugar donde se efectuarán los estudios: XXX"
+        m_dir = re.search(r'Lugar\s+donde\s+se\s+efectuar[aá]n\s+los?\s+estudios?[:\s]+([A-Z0-9\s\.\-,/]+?)(?:Local|Código|Provincia|Tel)', t, re.S | re.I)
+        direccion = re.sub(r'\s+', ' ', (m_dir.group(1).strip() if m_dir else '')).strip()
+        m_loc = re.search(r'Localidad[^:]*:\s*([A-Z\s]+?)\s*/', t)
+        localidad = (m_loc.group(1).strip() if m_loc else '')
+        dir_completa = f"{direccion}, {localidad}".strip(', ')
+        dia_sem = DIAS_SEM[fecha_ev.weekday()]
+        aviso = (f"*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
+                 f"para *Estudio SRT ({estudios})*.  *DIRECCION:* {dir_completa or '(ver PDF)'}")
+        return {
+            'fecha_evento': fecha_ev,
+            'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- ESTUDIO SRT {hora_str} {estudios[:60]}",
+            'aviso_cliente': aviso,
+            'hora': hora_str,
+            'direccion': dir_completa,
+            'estudios': estudios,
+            'subtipo': 'orden_estudio_cliente',
+        }
+
+    # Caso 1: intimación al abogado (default si no hay Fecha/Hora Prestación)
     fecha_ev = sumar_dh(notif, 5)
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- VENCE CONTESTAR INTIMACION SRT",
         'aviso_cliente': None,
+        'subtipo': 'intimacion_abogado',
     }
 
 def proc_citacion_examen(c):
@@ -272,10 +310,17 @@ if dict_itm:
         L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) {t}: vence {p['fecha_evento']}")
 
 const = grupo('Notificación de Constancia de Orden de Estudio')
-if const:
-    L.append('\n📝 *CONSTANCIA ORDEN ESTUDIO — agendadas a 5 hábiles para contestar*')
-    for p in const:
+const_intim = [p for p in const if p.get('subtipo') == 'intimacion_abogado']
+const_estudio = [p for p in const if p.get('subtipo') == 'orden_estudio_cliente']
+if const_intim:
+    L.append('\n📝 *CONSTANCIA (INTIMACIÓN AL ABOGADO) — agendadas a 5 hábiles para contestar*')
+    for p in const_intim:
         L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}): vence {p['fecha_evento']}")
+if const_estudio:
+    L.append('\n🏥 *ORDEN DE ESTUDIO AL CLIENTE — agendadas + avisos cliente*')
+    for p in const_estudio:
+        mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
+        L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')} {p.get('estudios','')[:50]}{mk}")
 
 examen = grupo('Notificación de Citación')
 if examen:
