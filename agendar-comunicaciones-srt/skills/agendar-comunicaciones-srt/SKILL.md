@@ -21,13 +21,17 @@ Chequeo diario (L-V 9am AR) de comunicaciones nuevas de Mi Ventanilla con plazo 
 
 ## TIPOS CUBIERTOS
 
-| Tipo | Plazo / Acción | Evento en Calendar | Aviso al cliente |
-|------|----------------|---------------------|------------------|
-| Notificación de Dictamen Médico | 3 días hábiles para impugnar | `NOMBRE-SRT- VENCE IMPUGNAR DICTAMEN MEDICO` | No |
-| Notificación de ITM | 3 días hábiles para impugnar | `NOMBRE-SRT- VENCE IMPUGNAR ITM` | No |
-| Notificación de Constancia de Orden de Estudio | 5 días hábiles para contestar intimación | `NOMBRE-SRT- VENCE CONTESTAR INTIMACION SRT` | No |
-| Notificación de Citación | Fecha de audiencia directa | `NOMBRE-SRT- EXAMEN FISICO SRT HH:MM DIR` | **Sí** (WA formato Mara) |
-| Notificación de Citación al Servicio de Homologación | Fecha de audiencia directa | `NOMBRE-SRT- AUDIENCIA HOMOLOGACION HH:MM (Teams)` | **Sí** (WA con link) |
+| Tipo | Plazo / Acción | Calendar | Aviso al cliente |
+|------|----------------|----------|------------------|
+| Dictamen Médico | 3 días hábiles impugnar | Principal | No |
+| ITM | 3 días hábiles impugnar | Principal | No |
+| Constancia Orden Estudio (intimación) | 5 días hábiles contestar | Principal | No |
+| Constancia Orden Estudio (al cliente) | Fecha estudio directa | Principal | **Sí** (cálido) |
+| Citación Examen Físico | Fecha audiencia directa | Principal | **Sí** (cálido) |
+| Citación Homologación (Teams) | Fecha audiencia directa | Principal | **Sí** (con link) |
+| **Acto Administrativo (Clausura)** | **15d CABA / 15+90d Pcia** | **✱ Vencimientos** | No (el cliente no se entera) |
+
+Nota: las clausuras también las verifica el skill `control-clausuras-srt` los lunes. Acá se **crean diariamente** apenas llegan, el otro skill **controla** que estén bien agendadas. Dos IAs, un fiscaliza lo de la otra.
 
 ## REGLAS
 
@@ -61,7 +65,9 @@ SELECT m.id AS comunicacion_id,
   m.srt_expediente_nro AS srt,
   (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_notif,
   m.tipo_comunicacion,
+  m.detalle,                         -- necesario para detectar Clausura
   c.nombre AS nombre_actor,
+  c.comision_medica AS cm,          -- necesario para clausuras CABA vs Pcia
   c.wa_chat_id AS grupo_cliente_wa,  -- chat_id del grupo WhatsApp con el cliente
   a.texto_extraido
 FROM comunicaciones_miventanilla m
@@ -72,7 +78,8 @@ WHERE m.tipo_comunicacion IN (
     'Notificación de ITM',
     'Notificación de Constancia de Orden de Estudio',
     'Notificación de Citación',
-    'Notificación de Citación al Servicio de Homologación'
+    'Notificación de Citación al Servicio de Homologación',
+    'Notificación de Acto Administrativo'  -- clausuras (filtradas por detalle en el procesador)
   )
   AND m.agendado_en_calendar_at IS NULL
   AND m.fecha_notificacion >= (now() - interval '60 days')
@@ -140,8 +147,14 @@ def proc_constancia_orden_estudio(c):
         localidad = (m_loc.group(1).strip() if m_loc else '')
         dir_completa = f"{direccion}, {localidad}".strip(', ')
         dia_sem = DIAS_SEM[fecha_ev.weekday()]
-        aviso = (f"*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
-                 f"para *Estudio SRT ({estudios})*.  *DIRECCION:* {dir_completa or '(ver PDF)'}")
+        aviso = (
+            f"¡Hola! Te aviso que la SRT te ordenó un estudio médico 🩺\n\n"
+            f"🔬 {estudios}\n"
+            f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
+            f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
+            f"Llevá tu DNI. El estudio no te lo pueden cobrar. "
+            f"Si no podés ir avisanos cuanto antes por acá así vemos qué hacemos 🙌"
+        )
         return {
             'fecha_evento': fecha_ev,
             'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- ESTUDIO SRT {hora_str} {estudios[:60]}",
@@ -169,42 +182,90 @@ def proc_citacion_examen(c):
     fecha_str = m_fecha.group(1)
     hora_str = m_fecha.group(2).replace('.', ':')
     fecha_ev = date(*[int(x) for x in reversed(fecha_str.split('/'))])
-    # Dirección: "en el domicilio sito en la calle ... a fin de realizar"
     m_dir = re.search(r'sito\s+en\s+la\s+calle\s+(.+?)\s*,?\s*a\s+fin\s+de\s+realizar', t, re.S | re.I)
-    direccion = re.sub(r'\s+', ' ', m_dir.group(1).strip()) if m_dir else '(dir no encontrada)'
-    # Tipo de estudio / examen
+    direccion = re.sub(r'\s+', ' ', m_dir.group(1).strip()) if m_dir else '(ver PDF en Mi Ventanilla)'
     m_tipo = re.search(r'fin de realizar\s+la?\s+([^\.\n]+)', t, re.I)
     tipo_estudio = (m_tipo.group(1).strip() if m_tipo else 'Examen Físico').rstrip('.').strip()
     dia_sem = DIAS_SEM[fecha_ev.weekday()]
-    aviso = (f"*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
-             f"para *{tipo_estudio}*.  *DIRECCION:* {direccion}")
+    aviso = (
+        f"¡Hola! Te aviso que la SRT te citó a *{tipo_estudio}* 🩺\n\n"
+        f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
+        f"📍 {direccion}\n\n"
+        f"Llevá tu DNI y, si usás, anteojos o audífonos. "
+        f"Si no podés asistir avisanos cuanto antes por acá así vemos qué hacemos 🙌"
+    )
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- {tipo_estudio.upper()} SRT {hora_str}",
-        'aviso_cliente': aviso,
-        'hora': hora_str,
-        'direccion': direccion,
+        'aviso_cliente': aviso, 'hora': hora_str, 'direccion': direccion,
     }
 
 def proc_citacion_homologacion(c):
     t = c.get('texto_extraido') or ''
-    m_fecha = re.search(r'virtual el día\s+(\d{2}/\d{2}/\d{4})\s*a las\s+(\d{1,2}[:.]?\d{2})', t)
+    m_fecha = re.search(r'virtual el d[ií]a\s+(\d{2}/\d{2}/\d{4})\s*a las\s+(\d{1,2}[:.]?\d{2})', t)
     if not m_fecha: return None
-    fecha_str = m_fecha.group(1)
-    hora_str = m_fecha.group(2).replace('.', ':')
+    fecha_str = m_fecha.group(1); hora_str = m_fecha.group(2).replace('.', ':')
     fecha_ev = date(*[int(x) for x in reversed(fecha_str.split('/'))])
     m_link = re.search(r'https://go\.srt\.gob\.ar/\S+', t)
     link = m_link.group(0) if m_link else ''
     dia_sem = DIAS_SEM[fecha_ev.weekday()]
-    aviso = (f"*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
-             f"*Audiencia de Homologación SRT* (virtual por Teams).\n{link}".strip())
+    aviso = (
+        f"¡Hola! Te aviso que tenés una audiencia virtual ante el Servicio de Homologación de la SRT ⚖️\n\n"
+        f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
+        f"💻 Por Microsoft Teams: {link}\n\n"
+        f"Asegurate de conectarte con buena señal y tener el DNI a mano. "
+        f"Si hay algún inconveniente, avisanos con tiempo por acá 🙌"
+    )
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- AUDIENCIA HOMOLOGACION SRT {hora_str} (Teams)",
-        'aviso_cliente': aviso,
-        'hora': hora_str,
-        'link': link,
+        'aviso_cliente': aviso, 'hora': hora_str, 'link': link,
     }
+
+def proc_clausura(c):
+    """Notificación de Acto Administrativo con Clausura en detalle.
+    15 días hábiles CABA (CM 10L, CABA), 15+90 días hábiles Pcia BsAs.
+    Va al calendario ✱ Vencimientos (no al principal).
+    NO manda aviso al cliente (es un plazo interno del estudio).
+    """
+    notif = date.fromisoformat(c['fecha_notif'])
+    cm = (c.get('cm') or '').upper()
+    is_caba = cm in ('CABA', 'CM 10L')
+    # Siempre el 15d
+    f15 = sumar_dh(notif, 15)
+    ciudad = 'CABA' if is_caba else (cm or 'PCIA').upper()
+    # Retorna info estructurada que Paso 3 usa para crear los 1-2 eventos
+    eventos = [{
+        'fecha_evento': f15,
+        'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'} - {c['srt']} - VENCE APELAR CLAUSURA (15 DIAS) {ciudad}",
+        'calendar_override': 'f98t26v6l01v4ss922e069rid0@group.calendar.google.com',
+        'colorId_override': '11',
+    }]
+    if not is_caba:
+        f90 = sumar_dh(notif, 90)
+        eventos.append({
+            'fecha_evento': f90,
+            'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'} - {c['srt']} - VENCE APELAR CLAUSURA (90 DÍAS) {ciudad}",
+            'calendar_override': 'f98t26v6l01v4ss922e069rid0@group.calendar.google.com',
+            'colorId_override': '10',
+        })
+    # Devolvemos el primer evento en fecha_evento + lista completa en 'eventos_extra' para agendar
+    return {
+        'fecha_evento': eventos[0]['fecha_evento'],
+        'summary': eventos[0]['summary'],
+        'aviso_cliente': None,
+        'eventos_extra': eventos,
+        'subtipo': 'clausura_caba' if is_caba else 'clausura_pcia',
+        'calendar_override': eventos[0]['calendar_override'],
+        'colorId_override': eventos[0]['colorId_override'],
+    }
+
+def dispatch_acto_administrativo(c):
+    """Clausuras entran acá porque su tipo_comunicacion es 'Notificación de Acto Administrativo'
+    pero solo tratamos las que tienen 'Clausura' en el detalle."""
+    if 'Clausura' in (c.get('detalle') or ''):
+        return proc_clausura(c)
+    return None  # otros actos administrativos los ignora el skill (no sabemos qué hacer)
 
 PROCESADORES = {
     'Notificación de Dictamen Médico': lambda c: proc_dictamen_itm(c, 'DICTAMEN MEDICO'),
@@ -212,6 +273,7 @@ PROCESADORES = {
     'Notificación de Constancia de Orden de Estudio': proc_constancia_orden_estudio,
     'Notificación de Citación': proc_citacion_examen,
     'Notificación de Citación al Servicio de Homologación': proc_citacion_homologacion,
+    'Notificación de Acto Administrativo': dispatch_acto_administrativo,
 }
 
 comunic = json.load(open('/tmp/comunicaciones.json'))
@@ -236,20 +298,26 @@ print(f'Procesadas: {len(procesadas)} | Errores de parseo: {len(errores)}')
 
 ### Paso 3 — Crear eventos en Calendar
 
-Para cada item en `/tmp/procesadas.json`:
+Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia crean 2):
 
-- **calendarId**: `flirteador84@gmail.com`
-- **summary**: `item.summary`
+- **calendarId**: usar `item.calendar_override` si existe (clausuras → `✱ Vencimientos`), sino default `flirteador84@gmail.com`
+- **summary**: `item.summary` (o recorrer `item.eventos_extra` si existe, para clausuras Pcia)
 - **allDay**: true
 - **startTime**: `{fecha_evento}T00:00:00`
-- **endTime**: `{fecha_evento + 2 días}T00:00:00` (mismo pattern que Mara)
-- **colorId**: `'6'` (Tangerine naranja)
-- **description**:
-  - Para dictamen/itm/constancia: `Fecha de notif: DD/MM/YYYY — auto-agendado por agendar-comunicaciones-srt`
-  - Para citación: incluir `Hora: {hora}`, `Dirección: {direccion}` (o `Link: {link}` para homologación)
+- **endTime**: `{fecha_evento + 2 días}T00:00:00` (pattern Mara)
+- **colorId**: `item.colorId_override` si existe, sino `'6'` (default naranja)
+- **description**: `Fecha de notif: DD/MM/YYYY — auto-agendado por agendar-comunicaciones-srt`. Para citación agregar hora/dirección/link.
 - **timeZone**: `America/Argentina/Buenos_Aires`
 
-Chequear response. Si `status: confirmed` → marcar item como `agendado_ok=True` y guardar `event_id`. Si falla, guardar en errores.
+Loop para clausuras Pcia (2 eventos por comunicación):
+```python
+eventos_a_crear = item.get('eventos_extra') or [item]
+for ev in eventos_a_crear:
+    # crear con calendar_override / colorId_override
+    ...
+```
+
+Chequear response. Si `status: confirmed` → marcar `agendado_ok=True` y guardar `event_id`. Si falla, guardar en errores.
 
 ### Paso 4 — Marcar como procesado en Supabase
 
@@ -328,6 +396,14 @@ if examen:
     for p in examen:
         mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
         L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')}{mk}")
+
+clausuras = [p for p in procesadas if p['tipo_comunicacion'] == 'Notificación de Acto Administrativo' and 'Clausura' in (p.get('detalle') or '')]
+if clausuras:
+    L.append('\n🏛️ *CLAUSURAS SRT — agendadas en ✱ Vencimientos*')
+    for p in clausuras:
+        sub = p.get('subtipo','')
+        plazos = '15+90d' if 'pcia' in sub else '15d'
+        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) {plazos}: vence {p['fecha_evento']}")
 
 homo = grupo('Notificación de Citación al Servicio de Homologación')
 if homo:

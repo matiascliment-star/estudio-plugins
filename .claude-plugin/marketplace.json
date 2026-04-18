@@ -85,7 +85,7 @@
     },
     {
       "name": "agendar-comunicaciones-srt",
-      "version": "1.4.1",
+      "version": "1.5.0",
       "source": "./agendar-comunicaciones-srt",
       "description": "Agenda diariamente Dictámenes Médicos e ITMs de Mi Ventanilla SRT con plazo de 3 días hábiles + alerta al grupo Claude SRT para Constancias de Orden de Estudio y Solicitudes de Historia Clínica que requieren revisión manual del PDF",
       "author": { "name": "Matias Climent" }
