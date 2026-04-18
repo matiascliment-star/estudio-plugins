@@ -81,8 +81,11 @@ WHERE m.tipo_comunicacion IN (
     'Notificación de Citación al Servicio de Homologación',
     'Notificación de Acto Administrativo'  -- clausuras (filtradas por detalle en el procesador)
   )
-  AND m.agendado_en_calendar_at IS NULL
-  AND m.fecha_notificacion >= (now() - interval '60 days')
+  AND COALESCE(m.estado, '') = ''            -- SIN procesar por las chicas en la app (rojas !)
+  AND m.agendado_en_calendar_at IS NULL      -- SIN procesar por Claude en corridas anteriores
+  -- Ventana: solo las del día anterior (+ margen de madrugada)
+  -- El skill corre L-V 9am, procesa lo de las últimas ~30 horas
+  AND m.fecha_notificacion >= (now() - interval '30 hours')
 ORDER BY m.fecha_notificacion ASC;
 ```
 
