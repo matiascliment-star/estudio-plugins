@@ -111,6 +111,22 @@ def sumar_dh(fi, n):
     return d
 
 DIAS_SEM = {0:'Lunes',1:'Martes',2:'Miércoles',3:'Jueves',4:'Viernes',5:'Sábado',6:'Domingo'}
+STOP_APELLIDO = {'DE','LA','DEL','LOS','LAS','VAN','VON','Y'}
+
+def primer_nombre(nombre_actor):
+    """Extrae un primer nombre razonable de 'APELLIDO NOMBRE1 NOMBRE2'.
+    Heurística: skip apellido (1ra palabra) y stopwords de partícula; toma la siguiente.
+    No es infalible con apellidos compuestos (ej: 'ARANDA PEREIRA OSCAR'→'Pereira'),
+    pero funciona para la mayoría. Si falla, queda con apellido segundo — no ofensivo."""
+    if not nombre_actor: return ''
+    # Quitar sufijos con dígitos tipo "2 ACC", "3ºACC"
+    partes = [p for p in nombre_actor.strip().split() if not any(ch.isdigit() for ch in p)]
+    if len(partes) <= 1:
+        return partes[0].title() if partes else ''
+    i = 1
+    while i < len(partes) and partes[i].upper() in STOP_APELLIDO:
+        i += 1
+    return partes[i].title() if i < len(partes) else partes[0].title()
 
 def proc_dictamen_itm(c, tipo_label):
     notif = date.fromisoformat(c['fecha_notif'])
@@ -147,14 +163,9 @@ def proc_constancia_orden_estudio(c):
         localidad = (m_loc.group(1).strip() if m_loc else '')
         dir_completa = f"{direccion}, {localidad}".strip(', ')
         dia_sem = DIAS_SEM[fecha_ev.weekday()]
-        aviso = (
-            f"¡Hola! Te aviso que la SRT te ordenó un estudio médico 🩺\n\n"
-            f"🔬 {estudios}\n"
-            f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
-            f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
-            f"Llevá tu DNI. El estudio no te lo pueden cobrar. "
-            f"Si no podés ir avisanos cuanto antes por acá así vemos qué hacemos 🙌"
-        )
+        saludo = f"Hola {primer_nombre(c['nombre_actor'])}!\n" if c.get('nombre_actor') else ''
+        aviso = (f"{saludo}*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
+                 f"para *{estudios}*.  *DIRECCION:* {dir_completa or '(ver PDF)'}")
         return {
             'fecha_evento': fecha_ev,
             'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- ESTUDIO SRT {hora_str} {estudios[:60]}",
@@ -187,13 +198,9 @@ def proc_citacion_examen(c):
     m_tipo = re.search(r'fin de realizar\s+la?\s+([^\.\n]+)', t, re.I)
     tipo_estudio = (m_tipo.group(1).strip() if m_tipo else 'Examen Físico').rstrip('.').strip()
     dia_sem = DIAS_SEM[fecha_ev.weekday()]
-    aviso = (
-        f"¡Hola! Te aviso que la SRT te citó a *{tipo_estudio}* 🩺\n\n"
-        f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
-        f"📍 {direccion}\n\n"
-        f"Llevá tu DNI y, si usás, anteojos o audífonos. "
-        f"Si no podés asistir avisanos cuanto antes por acá así vemos qué hacemos 🙌"
-    )
+    saludo = f"Hola {primer_nombre(c['nombre_actor'])}!\n" if c.get('nombre_actor') else ''
+    aviso = (f"{saludo}*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
+             f"para *{tipo_estudio}*.  *DIRECCION:* {direccion}")
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- {tipo_estudio.upper()} SRT {hora_str}",
@@ -209,13 +216,9 @@ def proc_citacion_homologacion(c):
     m_link = re.search(r'https://go\.srt\.gob\.ar/\S+', t)
     link = m_link.group(0) if m_link else ''
     dia_sem = DIAS_SEM[fecha_ev.weekday()]
-    aviso = (
-        f"¡Hola! Te aviso que tenés una audiencia virtual ante el Servicio de Homologación de la SRT ⚖️\n\n"
-        f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
-        f"💻 Por Microsoft Teams: {link}\n\n"
-        f"Asegurate de conectarte con buena señal y tener el DNI a mano. "
-        f"Si hay algún inconveniente, avisanos con tiempo por acá 🙌"
-    )
+    saludo = f"Hola {primer_nombre(c['nombre_actor'])}!\n" if c.get('nombre_actor') else ''
+    aviso = (f"{saludo}*{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs* "
+             f"*Audiencia Homologación SRT* (virtual Teams): {link}".strip())
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- AUDIENCIA HOMOLOGACION SRT {hora_str} (Teams)",
