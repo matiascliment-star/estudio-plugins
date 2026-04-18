@@ -170,8 +170,8 @@ def proc_citacion_examen(c):
     hora_str = m_fecha.group(2).replace('.', ':')
     fecha_ev = date(*[int(x) for x in reversed(fecha_str.split('/'))])
     # Dirección: "en el domicilio sito en la calle ... a fin de realizar"
-    m_dir = re.search(r'sito en la calle\s+([^,\.]+?(?:CP\.?\s*\d+)?)[,\.\s]+a fin', t, re.S | re.I)
-    direccion = m_dir.group(1).strip().replace('\n', ' ') if m_dir else '(dir no encontrada)'
+    m_dir = re.search(r'sito\s+en\s+la\s+calle\s+(.+?)\s*,?\s*a\s+fin\s+de\s+realizar', t, re.S | re.I)
+    direccion = re.sub(r'\s+', ' ', m_dir.group(1).strip()) if m_dir else '(dir no encontrada)'
     # Tipo de estudio / examen
     m_tipo = re.search(r'fin de realizar\s+la?\s+([^\.\n]+)', t, re.I)
     tipo_estudio = (m_tipo.group(1).strip() if m_tipo else 'Examen Físico').rstrip('.').strip()
