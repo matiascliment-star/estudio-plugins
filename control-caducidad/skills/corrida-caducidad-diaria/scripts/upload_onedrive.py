@@ -33,10 +33,14 @@ import urllib.parse
 import urllib.request
 
 
-def http_post_form(url, form_data):
+SPA_ORIGIN = "https://sistema-expedientes.estudiogarciaclimentabogados.com"
+
+def http_post_form(url, form_data, extra_headers=None):
     data = urllib.parse.urlencode(form_data).encode()
-    req = urllib.request.Request(url, data=data, method="POST",
-                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    if extra_headers:
+        headers.update(extra_headers)
+    req = urllib.request.Request(url, data=data, method="POST", headers=headers)
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode())
 
@@ -84,7 +88,7 @@ def refresh_access_token(refresh_token):
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
         "scope": "Files.ReadWrite.All Sites.Read.All offline_access",
-    })
+    }, extra_headers={"Origin": SPA_ORIGIN})
     if "access_token" not in resp:
         raise RuntimeError(f"No se pudo refrescar: {resp}")
     return resp["access_token"], resp.get("refresh_token")
