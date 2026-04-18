@@ -127,6 +127,39 @@ Cada subagente **Opus 4.7** recibe:
 
 El `estado_procesal`, `prueba_producida`, `prueba_pendiente`, `obstaculo_actual` y `estrategia_sugerida` se usan en el WhatsApp para dar contexto profundo a la chica. El `accion_inmediata` es lo que le pide que haga hoy.
 
+### Fase 2b: Actualizar `resumen_ia` del expediente
+
+Ya que el subagente leyó 30 movs + texto_proveido completo, aprovechar el análisis para **regrabar `expedientes.resumen_ia`** con formato consistente con el skill `resumir-supabase` (dos secciones obligatorias):
+
+**Sección 1 — Resumen estructurado por etapa:**
+
+- **Ejecución (estados 70–77):** SENTENCIA / APELACIONES / LIQUIDACIONES (nuestra vs contraria vs aprobada con montos) / MONTOS (capital, intereses, honorarios en $ y UMAs) / COBROS Y PAGOS (fechas exactas de depósitos, intimaciones, vencimientos, embargos, giros) / PENDIENTE (qué falta cobrar, gestiones pendientes, saldo estimado) / ÚLTIMO MOVIMIENTO.
+- **Prueba (estados 10–23):** DEMANDA (rubros, hechos) / CONTESTACIÓN / APERTURA A PRUEBA / PRUEBA OFRECIDA POR NOSOTROS / PRUEBA OFRECIDA POR ELLOS / PRUEBA PRODUCIDA (perito, fecha, % incapacidad, conclusiones) / PRUEBA PENDIENTE / PRÓXIMO PASO / ÚLTIMO MOVIMIENTO.
+- **Cámara/CSJN (estados 50–64):** SENTENCIA 1RA / APELACIONES (nuestras y de ellos) / ESTADO EN CÁMARA / SENTENCIA CÁMARA / ESTIMACIÓN MONTO TOTAL / ÚLTIMO MOVIMIENTO.
+- **Otras etapas:** ESTADO ACTUAL / RESUMEN / PRÓXIMO PASO / ÚLTIMO MOVIMIENTO.
+
+**Sección 2 — Cronología de hitos:**
+
+```
+═══════════════════════════════════════
+CRONOLOGIA DE HITOS
+═══════════════════════════════════════
+[DD/MM/AAAA] — [Descripción concisa del hito]
+```
+
+Solo hitos procesales importantes: sentencias con montos, apelaciones, liquidaciones, cobros, embargos, pericias con % incapacidad, honorarios en UMAs, recursos extraordinarios.
+
+**Regla de perspectiva:** desde NOSOTROS (actor) vs ELLOS (demandado). Mínimo 1500 caracteres. Usar dollar-quoting `$$...$$` en el UPDATE para evitar problemas con apóstrofes y comillas.
+
+```sql
+UPDATE expedientes
+SET resumen_ia = $$[resumen completo con ambas secciones]$$,
+    ultima_revision_auto = now()
+WHERE id = {expediente_id};
+```
+
+Esta actualización corre DESPUÉS de devolver el JSON del análisis, como última acción del subagente. Si falla el UPDATE, el subagente no corta la corrida — el análisis ya está en `caducidad_corridas`.
+
 **Tipos de fórmula** (auto-generar DOCX):
 - `pronto_despacho`
 - `intimar_pago`
