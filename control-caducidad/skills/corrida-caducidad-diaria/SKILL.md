@@ -129,27 +129,22 @@ El `estado_procesal`, `prueba_producida`, `prueba_pendiente`, `obstaculo_actual`
 
 ### Fase 2b: Actualizar `resumen_ia` del expediente
 
-Ya que el subagente leyó 30 movs + texto_proveido completo, aprovechar el análisis para **regrabar `expedientes.resumen_ia`** con formato consistente con el skill `resumir-supabase` (dos secciones obligatorias):
+Ya que el subagente leyó 30 movs + texto_proveido completo, aprovechar el análisis para **regrabar `expedientes.resumen_ia`** con formato IDÉNTICO al skill `resumir-supabase` (que está en el mismo repo `estudio-plugins`).
 
-**Sección 1 — Resumen estructurado por etapa:**
-
-- **Ejecución (estados 70–77):** SENTENCIA / APELACIONES / LIQUIDACIONES (nuestra vs contraria vs aprobada con montos) / MONTOS (capital, intereses, honorarios en $ y UMAs) / COBROS Y PAGOS (fechas exactas de depósitos, intimaciones, vencimientos, embargos, giros) / PENDIENTE (qué falta cobrar, gestiones pendientes, saldo estimado) / ÚLTIMO MOVIMIENTO.
-- **Prueba (estados 10–23):** DEMANDA (rubros, hechos) / CONTESTACIÓN / APERTURA A PRUEBA / PRUEBA OFRECIDA POR NOSOTROS / PRUEBA OFRECIDA POR ELLOS / PRUEBA PRODUCIDA (perito, fecha, % incapacidad, conclusiones) / PRUEBA PENDIENTE / PRÓXIMO PASO / ÚLTIMO MOVIMIENTO.
-- **Cámara/CSJN (estados 50–64):** SENTENCIA 1RA / APELACIONES (nuestras y de ellos) / ESTADO EN CÁMARA / SENTENCIA CÁMARA / ESTIMACIÓN MONTO TOTAL / ÚLTIMO MOVIMIENTO.
-- **Otras etapas:** ESTADO ACTUAL / RESUMEN / PRÓXIMO PASO / ÚLTIMO MOVIMIENTO.
-
-**Sección 2 — Cronología de hitos:**
+**Antes de escribir el resumen, el subagente DEBE leer el archivo:**
 
 ```
-═══════════════════════════════════════
-CRONOLOGIA DE HITOS
-═══════════════════════════════════════
-[DD/MM/AAAA] — [Descripción concisa del hito]
+monitoreo-expedientes/skills/resumir-supabase/SKILL.md
 ```
 
-Solo hitos procesales importantes: sentencias con montos, apelaciones, liquidaciones, cobros, embargos, pericias con % incapacidad, honorarios en UMAs, recursos extraordinarios.
+(o `resumir-supabase/skills/resumir-supabase/SKILL.md` según la estructura del repo clonado — buscar con `find . -name SKILL.md -path '*resumir-supabase*'`)
 
-**Regla de perspectiva:** desde NOSOTROS (actor) vs ELLOS (demandado). Mínimo 1500 caracteres. Usar dollar-quoting `$$...$$` en el UPDATE para evitar problemas con apóstrofes y comillas.
+De ese archivo tomar:
+- El template por etapa (EJECUCIÓN / PRUEBA / CÁMARA-CSJN / Otros).
+- La sección 2 obligatoria (CRONOLOGIA DE HITOS).
+- Las reglas de mínimo 1500 caracteres, perspectiva NOSOTROS vs ELLOS, dollar-quoting, etc.
+
+Una sola fuente de verdad — si el template se ajusta en `resumir-supabase`, la corrida de caducidad también lo refleja automáticamente.
 
 ```sql
 UPDATE expedientes
