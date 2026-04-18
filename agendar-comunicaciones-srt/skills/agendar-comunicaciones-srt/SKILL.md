@@ -116,6 +116,23 @@ def sumar_dh(fi, n):
 DIAS_SEM = {0:'Lunes',1:'Martes',2:'Miércoles',3:'Jueves',4:'Viernes',5:'Sábado',6:'Domingo'}
 STOP_APELLIDO = {'DE','LA','DEL','LOS','LAS','VAN','VON','Y'}
 
+# Estudios que típicamente requieren asesoramiento previo (respuestas del cliente influyen)
+TRIGGERS_ASESORAMIENTO = ['PSICO','PSIQU','OFTAL','ORL','OTORRIN','AUDIO','AUDIOMETR',
+                          'POTENCIAL','NEURO','TRAUMATO','INTERCONSULT','EXAMEN',
+                          'EVALUAC','VIDEO','ENDOSCOP','ELECTRO','ECO','RESONANC','TOMOGR']
+
+def estudio_requiere_asesoramiento(estudios_text):
+    """True si el estudio requiere asesoramiento (respuestas del paciente influyen).
+    False solo si es RX/radiografía pura (no hay respuestas del paciente).
+    Fail-safe: ante duda, True."""
+    t = (estudios_text or '').upper()
+    if any(k in t for k in TRIGGERS_ASESORAMIENTO):
+        return True
+    # Si contiene solo radiografía/RX y nada más, es simple
+    if ('RADIOGRAF' in t or ' RX ' in t or t.startswith('RX')) and len(t) < 200:
+        return False
+    return True  # default: pedir asesoramiento
+
 def primer_nombre(nombre_actor):
     """Extrae un primer nombre razonable de 'APELLIDO NOMBRE1 NOMBRE2'.
     Heurística: skip apellido (1ra palabra) y stopwords de partícula; toma la siguiente.
@@ -168,13 +185,19 @@ def proc_constancia_orden_estudio(c):
         dia_sem = DIAS_SEM[fecha_ev.weekday()]
         pn = primer_nombre(c['nombre_actor']) if c.get('nombre_actor') else ''
         saludo = f"Hola {pn}!" if pn else "Hola!"
+        requiere = estudio_requiere_asesoramiento(estudios)
+        aviso_previo = (
+            "⚠️ *Importante*: antes de asistir comunicate con nosotros por acá para "
+            "recibir el asesoramiento previo.\n\n"
+        ) if requiere else ""
         aviso = (
             f"{saludo} Te avisamos que la SRT te ordenó un *estudio médico* "
             f"en el marco de tu expediente. Tenés que ir a hacértelo:\n\n"
             f"🩺 Estudio: {estudios}\n"
             f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
             f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
-            f"Llevá tu DNI. Recordá que el estudio *no te lo pueden cobrar*. "
+            f"{aviso_previo}"
+            f"Llevá tu DNI. El estudio *no te lo pueden cobrar*. "
             f"Si no podés ir avisanos por acá con tiempo así lo reprogramamos."
         )
         return {
