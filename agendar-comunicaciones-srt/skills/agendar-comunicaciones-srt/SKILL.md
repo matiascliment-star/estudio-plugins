@@ -207,6 +207,7 @@ def proc_constancia_orden_estudio(c):
             'direccion': dir_completa,
             'estudios': estudios,
             'subtipo': 'orden_estudio_cliente',
+            'con_hora': True,
         }
 
     # Caso 1: intimación al abogado (default si no hay Fecha/Hora Prestación)
@@ -246,6 +247,7 @@ def proc_citacion_examen(c):
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- {tipo_estudio.upper()} SRT {hora_str}",
         'aviso_cliente': aviso, 'hora': hora_str, 'direccion': direccion,
+        'con_hora': True,  # evento con hora específica (no all-day)
     }
 
 def proc_citacion_homologacion(c):
@@ -272,6 +274,7 @@ def proc_citacion_homologacion(c):
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- AUDIENCIA HOMOLOGACION SRT {hora_str} (Teams)",
         'aviso_cliente': aviso, 'hora': hora_str, 'link': link,
+        'con_hora': True,
     }
 
 def proc_clausura(c):
@@ -350,16 +353,29 @@ print(f'Procesadas: {len(procesadas)} | Errores de parseo: {len(errores)}')
 
 ### Paso 3 — Crear eventos en Calendar
 
-Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia crean 2):
+Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia crean 2).
 
-- **calendarId**: usar `item.calendar_override` si existe (clausuras → `✱ Vencimientos`), sino default `flirteador84@gmail.com`
-- **summary**: `item.summary` (o recorrer `item.eventos_extra` si existe, para clausuras Pcia)
+**Dos modalidades según tipo**:
+
+**A) Evento con hora específica** (Citación Examen, Citación Homologación, Orden Estudio al cliente — tienen una hora de cita real):
+- **allDay**: false
+- **startTime**: `{fecha_evento}T{HH:MM}:00` (hora exacta del PDF)
+- **endTime**: `{fecha_evento}T{HH+1:MM}:00` (1 hora estimada)
+- **colorId**: `'6'` (Tangerine naranja)
+
+**B) Evento all-day** (Dictamen, ITM, Intimación Constancia, Clausura — son plazos, no hora específica):
 - **allDay**: true
 - **startTime**: `{fecha_evento}T00:00:00`
 - **endTime**: `{fecha_evento + 2 días}T00:00:00` (pattern Mara)
-- **colorId**: `item.colorId_override` si existe, sino `'6'` (default naranja)
+- **colorId**: `item.colorId_override` si existe (clausura 15d=`'11'`, 90d=`'10'`), sino `'6'`
+
+**Común a ambos**:
+- **calendarId**: `item.calendar_override` si existe (clausuras → `✱ Vencimientos`), sino `flirteador84@gmail.com`
+- **summary**: `item.summary`
 - **description**: `Fecha de notif: DD/MM/YYYY — auto-agendado por agendar-comunicaciones-srt`. Para citación agregar hora/dirección/link.
 - **timeZone**: `America/Argentina/Buenos_Aires`
+
+Los procesadores marcan qué modalidad con `item.con_hora = True` (modalidad A) o ausente/False (modalidad B).
 
 Loop para clausuras Pcia (2 eventos por comunicación):
 ```python
