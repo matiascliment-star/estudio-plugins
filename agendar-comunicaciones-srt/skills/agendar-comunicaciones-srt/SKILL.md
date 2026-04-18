@@ -443,32 +443,38 @@ L.append(f'Agendadas: {len(procesadas)} | Avisos WA clientes: {len(avisos_enviad
 def grupo(tipo):
     return [p for p in procesadas if p['tipo_comunicacion'] == tipo]
 
+def fmt_fecha(s):
+    """YYYY-MM-DD → DD/MM"""
+    try:
+        y,m,d = s.split('-'); return f"{d}/{m}"
+    except: return s or '?'
+
 dict_itm = grupo('Notificación de Dictamen Médico') + grupo('Notificación de ITM')
 if dict_itm:
-    L.append('\n✅ *DICTAMEN MÉDICO / ITM — agendados a 3 hábiles*')
+    L.append('\n✅ *DICTAMEN MÉDICO / ITM — plazo 3 hábiles p/ impugnar*')
     for p in dict_itm:
         t = 'DICT MED' if 'Dictamen' in p['tipo_comunicacion'] else 'ITM'
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) {t}: vence {p['fecha_evento']}")
+        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — {t} notificado {fmt_fecha(p.get('fecha_notif'))} → vence impugnar {fmt_fecha(p['fecha_evento'])}")
 
 const = grupo('Notificación de Constancia de Orden de Estudio')
 const_intim = [p for p in const if p.get('subtipo') == 'intimacion_abogado']
 const_estudio = [p for p in const if p.get('subtipo') == 'orden_estudio_cliente']
 if const_intim:
-    L.append('\n📝 *CONSTANCIA (INTIMACIÓN AL ABOGADO) — agendadas a 5 hábiles para contestar*')
+    L.append('\n📝 *CONSTANCIA (INTIMACIÓN AL ABOGADO) — plazo 5 hábiles p/ contestar*')
     for p in const_intim:
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}): vence {p['fecha_evento']}")
+        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — notificada {fmt_fecha(p.get('fecha_notif'))} → vence contestar {fmt_fecha(p['fecha_evento'])}")
 if const_estudio:
-    L.append('\n🏥 *ORDEN DE ESTUDIO AL CLIENTE — agendadas + avisos cliente*')
+    L.append('\n🏥 *ORDEN DE ESTUDIO AL CLIENTE — agendada + aviso WA*')
     for p in const_estudio:
         mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
-        L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')} {p.get('estudios','')[:50]}{mk}")
+        L.append(f"• {p['nombre_actor']} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → estudio {fmt_fecha(p['fecha_evento'])} {p.get('hora','')} {p.get('estudios','')[:50]}{mk}")
 
 examen = grupo('Notificación de Citación')
 if examen:
-    L.append('\n🏥 *CITACIÓN EXAMEN FÍSICO — agendadas + avisos cliente*')
+    L.append('\n🏥 *CITACIÓN EXAMEN FÍSICO — agendada + aviso WA*')
     for p in examen:
         mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
-        L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')}{mk}")
+        L.append(f"• {p['nombre_actor']} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → examen {fmt_fecha(p['fecha_evento'])} {p.get('hora','')}{mk}")
 
 clausuras = [p for p in procesadas if p['tipo_comunicacion'] == 'Notificación de Acto Administrativo' and 'Clausura' in (p.get('detalle') or '')]
 if clausuras:
@@ -476,14 +482,14 @@ if clausuras:
     for p in clausuras:
         sub = p.get('subtipo','')
         plazos = '15+90d' if 'pcia' in sub else '15d'
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) {plazos}: vence {p['fecha_evento']}")
+        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → {plazos}, vence {fmt_fecha(p['fecha_evento'])}")
 
 homo = grupo('Notificación de Citación al Servicio de Homologación')
 if homo:
-    L.append('\n⚖️ *AUDIENCIA HOMOLOGACIÓN — agendadas + avisos cliente*')
+    L.append('\n⚖️ *AUDIENCIA HOMOLOGACIÓN — agendada + aviso WA*')
     for p in homo:
         mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
-        L.append(f"• {p['nombre_actor']} ({p['srt']}) {p['fecha_evento']} {p.get('hora','')}{mk}")
+        L.append(f"• {p['nombre_actor']} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → audiencia {fmt_fecha(p['fecha_evento'])} {p.get('hora','')}{mk}")
 
 if sin_grupo_citacion:
     L.append('\n📞 *CITACIONES SIN GRUPO WA DEL CLIENTE — copiar y pegar al cliente*')
