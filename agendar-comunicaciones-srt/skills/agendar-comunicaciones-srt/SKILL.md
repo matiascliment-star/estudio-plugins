@@ -53,7 +53,10 @@ Nota: las clausuras también las verifica el skill `control-clausuras-srt` los l
 
 ```sql
 SELECT fecha::text FROM feriados_ar
-WHERE fecha BETWEEN (now() - interval '30 days')::date AND (now() + interval '120 days')::date
+WHERE fecha BETWEEN
+    ((now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date - interval '30 days')::date
+  AND
+    ((now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date + interval '120 days')::date
 ORDER BY fecha;
 ```
 → `/tmp/feriados.json`
@@ -79,15 +82,19 @@ WHERE m.tipo_comunicacion IN (
     'Notificación de Constancia de Orden de Estudio',
     'Notificación de Citación',
     'Notificación de Citación al Servicio de Homologación',
-    'Notificación de Acto Administrativo'  -- clausuras (filtradas por detalle en el procesador)
+    'Notificación de Acto Administrativo',  -- clausuras (filtradas por detalle en el procesador)
+    'Envío de Comunicación'                 -- prestación dineraria (filtrada por detalle en el procesador)
   )
   AND COALESCE(m.estado, '') = ''            -- SIN procesar por las chicas en la app (rojas !)
   AND m.agendado_en_calendar_at IS NULL      -- SIN procesar por Claude en corridas anteriores
   -- Ventana: hoy + ayer + anteayer (días calendario completos AR).
-  -- Ejemplo: si corre el 18/04 a las 9am, procesa TODAS las notificaciones
+  -- Ejemplo: si corre el 18/04 a las 9am AR, procesa TODAS las notificaciones
   -- del 16/04, 17/04 y 18/04 completas. Cubre hoy + 2 días atrás.
+  -- IMPORTANTE: `hoy` se calcula en TZ Argentina (no UTC), porque el server
+  -- puede correr en UTC y los 9am AR son las 12:00 UTC → mismo día AR.
   AND (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-      BETWEEN (current_date - interval '2 days')::date AND current_date
+      BETWEEN ((now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date - interval '2 days')::date
+          AND (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
 ORDER BY m.fecha_notificacion ASC;
 ```
 
@@ -319,12 +326,37 @@ def proc_clausura(c):
         'colorId_override': eventos[0]['colorId_override'],
     }
 
+# Sentinel: los dispatchers lo devuelven cuando la comunicación no aplica a su sub-tipo.
+# Se usa para distinguir "no es mi caso, skip silencioso" de "fallo de parseo" (que es None).
+SKIP_DISPATCH = object()
+
 def dispatch_acto_administrativo(c):
     """Clausuras entran acá porque su tipo_comunicacion es 'Notificación de Acto Administrativo'
     pero solo tratamos las que tienen 'Clausura' en el detalle."""
     if 'Clausura' in (c.get('detalle') or ''):
         return proc_clausura(c)
-    return None  # otros actos administrativos los ignora el skill (no sabemos qué hacer)
+    return SKIP_DISPATCH  # otros actos administrativos los ignora el skill
+
+def proc_prestacion_dineraria(c):
+    """Notificación de Cálculo de Prestación Dineraria.
+    Informativo: no agenda evento, no manda WA, solo aparece en el reporte
+    para que el equipo lo vea y controle el monto liquidado."""
+    notif = date.fromisoformat(c['fecha_notif'])
+    return {
+        'fecha_evento': notif,         # usamos notif como placeholder (no crea evento)
+        'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- PREST DINERARIA (informativo)",
+        'aviso_cliente': None,
+        'subtipo': 'prest_dineraria',
+        'skip_calendar': True,          # Paso 3 debe saltearlo
+    }
+
+def dispatch_envio_comunicacion(c):
+    """'Envío de Comunicación' es muy genérico. Solo procesamos las que son
+    Notificación de Cálculo de Prestación Dineraria — el resto se ignora."""
+    det = (c.get('detalle') or '').lower()
+    if 'prest' in det and 'dinerari' in det:
+        return proc_prestacion_dineraria(c)
+    return SKIP_DISPATCH
 
 PROCESADORES = {
     'Notificación de Dictamen Médico': lambda c: proc_dictamen_itm(c, 'DICTAMEN MEDICO'),
@@ -333,6 +365,7 @@ PROCESADORES = {
     'Notificación de Citación': proc_citacion_examen,
     'Notificación de Citación al Servicio de Homologación': proc_citacion_homologacion,
     'Notificación de Acto Administrativo': dispatch_acto_administrativo,
+    'Envío de Comunicación': dispatch_envio_comunicacion,
 }
 
 comunic = json.load(open('/tmp/comunicaciones.json'))
@@ -343,6 +376,8 @@ for c in comunic:
     if not fn: continue
     try:
         res = fn(c)
+        if res is SKIP_DISPATCH:
+            continue  # dispatcher filtró: no aplica a ningún sub-procesador, no es error
         if res is None:
             errores.append({**c, 'error': 'no se pudo parsear texto'})
             continue
@@ -358,6 +393,8 @@ print(f'Procesadas: {len(procesadas)} | Errores de parseo: {len(errores)}')
 ### Paso 3 — Crear eventos en Calendar
 
 Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia crean 2).
+
+**Items con `skip_calendar: True`** (ej: prestación dineraria informativa) → NO se crea evento en Calendar, pero en Paso 4 igual se marca `agendado_en_calendar_at = now()` para no reprocesarla (con `calendar_event_id = NULL` y `calendar_event_fecha = NULL`).
 
 **Dos modalidades según tipo**:
 
@@ -427,14 +464,16 @@ Si **no hay `grupo_cliente_wa`** para el caso (no se encontró match automático
 
 ```python
 import json
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 procesadas = json.load(open('/tmp/procesadas.json'))
 errores = json.load(open('/tmp/errores_proceso.json'))
 sin_grupo_citacion = [p for p in procesadas if p.get('aviso_cliente') and not p.get('grupo_cliente_wa')]
 avisos_enviados = [p for p in procesadas if p.get('aviso_cliente') and p.get('grupo_cliente_wa') and p.get('aviso_ok')]
 
-hoy = date.today()
+# Fecha en timezone AR (el server puede estar en UTC)
+hoy = datetime.now(ZoneInfo('America/Argentina/Buenos_Aires')).date()
 L = [f'📋 *AGENDAR COMUNICACIONES SRT* — {hoy.strftime("%d/%m/%Y")}']
 L.append(f'Agendadas: {len(procesadas)} | Avisos WA clientes: {len(avisos_enviados)} | Sin grupo: {len(sin_grupo_citacion)} | Errores: {len(errores)}')
 
@@ -489,6 +528,13 @@ if homo:
     for p in homo:
         mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
         L.append(f"• {p['nombre_actor']} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → audiencia {fmt_fecha(p['fecha_evento'])} {p.get('hora','')}{mk}")
+
+prest_din = [p for p in procesadas if p.get('subtipo') == 'prest_dineraria']
+if prest_din:
+    L.append('\n💵 *NOTIFICACIÓN DE CÁLCULO DE PRESTACIÓN DINERARIA — revisar monto liquidado*')
+    L.append('_(Informativo. Abrir el PDF en Mi Ventanilla y controlar el cálculo.)_')
+    for p in prest_din:
+        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))}")
 
 if sin_grupo_citacion:
     L.append('\n📞 *CITACIONES SIN GRUPO WA DEL CLIENTE — copiar y pegar al cliente*')
