@@ -197,8 +197,7 @@ def proc_constancia_orden_estudio(c):
             f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
             f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
             f"{aviso_previo}"
-            f"Llevá tu DNI. El estudio *no te lo pueden cobrar*. "
-            f"Si no podés ir avisanos por acá con tiempo así lo reprogramamos."
+            f"Llevá tu DNI. Si no podés ir avisanos por acá con tiempo así lo reprogramamos."
         )
         return {
             'fecha_evento': fecha_ev,
