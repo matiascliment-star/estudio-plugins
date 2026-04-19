@@ -38,8 +38,10 @@ Ver detalles en `reglas-procesales.md` (este archivo se inyecta en el prompt de 
 ### Fase 1: Selección top 20+20
 
 Supabase project `wdgdbbcwcrirpnfdmykh`. La query calcula `dr = plazo - (hoy - fecha_ref)` donde:
-- `fecha_ref = MAX(ultimo_impulso_propio, último movimiento real)`
+- `fecha_ref = MAX(ultimo_impulso_propio, último movimiento real, último click válido)`
 - `plazo = expedientes.plazo_caducidad` (si está), sino por default: Cámara=90, CABA 1ra=180, resto=90.
+
+**Click válido** (de `impulsos_caducidad`): click con escrito asociado, O click sin escrito pero hace ≤5 días (plazo de gracia del sistema PJN/MEV para asociar escrito al click). Después de 5 días sin asociar, el click se considera "vencido" y deja de contar.
 
 ```sql
 WITH ult_mov AS (
@@ -48,11 +50,21 @@ WITH ult_mov AS (
   SELECT expediente_id, MAX(fecha) AS fecha FROM movimientos_judicial GROUP BY expediente_id
 ),
 agg AS (SELECT expediente_id, MAX(fecha) AS fecha FROM ult_mov GROUP BY expediente_id),
+ult_click AS (
+  SELECT expediente_id, MAX(fecha_click) AS fecha
+  FROM impulsos_caducidad
+  WHERE escrito_id IS NOT NULL                      -- click con escrito asociado
+     OR fecha_click > CURRENT_DATE - INTERVAL '5 days'  -- o click sin escrito pero dentro del plazo de gracia
+  GROUP BY expediente_id
+),
 base AS (
   SELECT
     e.id, e.numero, e.caratula, e.jurisdiccion,
-    GREATEST(COALESCE(e.ultimo_impulso_propio, '1900-01-01'::date),
-             COALESCE(a.fecha, '1900-01-01'::date)) AS fecha_ref,
+    GREATEST(
+      COALESCE(e.ultimo_impulso_propio, '1900-01-01'::date),
+      COALESCE(a.fecha, '1900-01-01'::date),
+      COALESCE(uc.fecha, '1900-01-01'::date)
+    ) AS fecha_ref,
     COALESCE(e.plazo_caducidad,
       CASE
         WHEN LOWER(COALESCE(e.instancia_actual,'')) IN ('camara','cámara','corte') THEN 90
@@ -63,6 +75,7 @@ base AS (
     e.onedrive_id, e.onedrive_url
   FROM expedientes e
   LEFT JOIN agg a ON a.expediente_id = e.id
+  LEFT JOIN ult_click uc ON uc.expediente_id = e.id
   WHERE COALESCE(e.excluido_caducidad, false) = false
     AND COALESCE(e.excluido_caducidad_temporal, false) = false
     AND e.estado IS DISTINCT FROM '80 Finalizado'
