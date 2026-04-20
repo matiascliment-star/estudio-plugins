@@ -1,9 +1,9 @@
 {
   "name": "escritos-judiciales",
-  "version": "1.3.0",
-  "description": "Redacta, sube y gestiona escritos judiciales argentinos. Incluye: redactar-escrito (lee expediente PJN/MEV, redacta DOCX profesional), subir-escrito-pjn (borrador PJN), subir-escrito-mev (borrador SCBA), pedir-embargo (embargo bancario), pedir-giro-honorarios (libramiento de giro de honorarios PJN/CABA con constancias embebidas), recurso-inaplicabilidad-ley (REX SCBA), ampliar-fundamentos-barrios-art55 (dos escritos separados: amplía fundamentos inconstitucionalidad art. 7 Ley 23.928 con fundamentación numérica Barrios + piso subsidiario art. 55 Ley 27.802).",
+  "version": "1.3.1",
+  "description": "Redacta, sube y gestiona escritos judiciales argentinos. Incluye: redactar-escrito (lee expediente PJN/MEV, redacta DOCX profesional), subir-escrito-pjn (borrador PJN), subir-escrito-mev (borrador SCBA), pedir-embargo (embargo bancario), pedir-giro-honorarios (libramiento de giro de honorarios PJN/CABA con constancias embebidas), recurso-inaplicabilidad-ley (REX SCBA), ampliar-fundamentos-barrios (escrito principal que dota de fundamentación numérica al planteo de inconstitucionalidad art. 7 Ley 23.928 según doctrina Barrios — tasa BNA vs IPC vs RIPTE), solicitar-piso-art55 (escrito subsidiario que reclama el piso inderogable del 67% del art. 55 inc. c Ley 27.802 con planteo de inconstitucionalidad del recorte del 33%).",
   "author": {
     "name": "Matias Climent"
   },
-  "keywords": ["escritos", "borradores", "pjn", "mev", "scba", "judicial", "provincia", "nacion", "barrios", "ley-27802", "indexacion", "ipc", "ripte"]
+  "keywords": ["escritos", "borradores", "pjn", "mev", "scba", "judicial", "provincia", "nacion", "barrios", "ley-27802", "indexacion", "ipc", "ripte", "confiscatoriedad", "piso-minimo"]
 }

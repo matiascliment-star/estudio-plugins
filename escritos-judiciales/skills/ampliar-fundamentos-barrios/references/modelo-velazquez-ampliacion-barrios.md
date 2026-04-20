@@ -2,7 +2,7 @@
 
 Fuente: Presentación en causa "VELAZQUEZ BRAIAN NICOLAS C/ LA SEGUNDA ART S.A." (Expte. N° 12852/2022), TTU N° 2 San Miguel, 06/03/2026.
 
-**Uso**: modelo del escrito PRINCIPAL. Reproducir la estructura y el tono exactos, adaptando solo los datos del caso. Los subrayados en las citas normativas y los montos en negrita son obligatorios.
+**Uso**: canon del escrito PRINCIPAL. Reproducir la estructura y el tono exactos, adaptando solo los datos del caso. Los subrayados en las citas normativas y los montos en negrita son obligatorios.
 
 ---
 
