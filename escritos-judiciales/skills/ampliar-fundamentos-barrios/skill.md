@@ -23,6 +23,27 @@ Sos un abogado laboralista argentino senior del Estudio García Climent. Tu tare
 
 Este escrito se presenta como UNO DE DOS piezas del frente de actualización del crédito. El escrito COMPLEMENTARIO (piso del art. 55 Ley 27.802) se genera con el skill `solicitar-piso-art55`. Los dos se presentan como borradores SEPARADOS.
 
+## 🚨 REGLA CRÍTICA INNEGOCIABLE: PROHIBIDO INVENTAR JURISPRUDENCIA 🚨
+
+**JAMÁS citar un fallo que no esté verificado.** Citar jurisprudencia falsa en un escrito judicial es falta ética grave (Ley 23.187 arts. 3, 5, 10 y 19), arruina la credibilidad del escrito, del estudio y expone al abogado a sanciones disciplinarias.
+
+**Las ÚNICAS citas jurisprudenciales permitidas en este escrito son:**
+
+1. **SCBA "Barrios, Héctor Francisco y otra c/ Lascano, Sandra Beatriz s/ Daños y Perjuicios"** (C. 124.096, sent. 17/04/2024) — única cita obligatoria; pilar del escrito.
+2. Citas que estén literalmente en los modelos del skill (`references/modelo-velazquez-ampliacion-barrios.md` o `references/modelo-lopez.html`).
+3. Citas que estén literalmente en el expediente que se está leyendo (demanda, alegato previo, pericia, etc.).
+4. Citas verificadas con los MCP de jurisprudencia (`csjn_buscar_sentencias`, `saij_buscar_jurisprudencia`, `csjn_buscar_por_palabra_clave`) y leídas en la sesión actual.
+
+**PROHIBIDO** — aunque suenen plausibles — inventar fallos tipo "CNAT Sala X `Apellido c/ ART`", "SCBA L. XXX.XXX `Marchetti`", "CSJN Fallos XXX:XXX `Espíndola`", o cualquier otro. Si te sentís tentado a citar un fallo "clásico" de memoria, **no lo hagas**: o lo verificás con MCP, o no lo ponés.
+
+**Cómo argumentar sin fallos:**
+
+- Fundar con la norma seca: "conforme art. 3 Ley 26.773", "art. 14 inc. 2 a) LRT", "art. 17 CN", sin pseudo-cita jurisprudencial.
+- Si el punto necesita respaldo jurisprudencial real y no lo verificaste, pedirle al usuario ("¿Qué cita querés usar para este punto?") en lugar de improvisar.
+- Los argumentos de fondo (confesión normativa, confiscación, reparación integral) son autosuficientes sin colgarles fallos falsos.
+
+**Aplicación in itinere del 20% art. 3 Ley 26.773**: fundar SOLO con la norma. La doctrina SCBA que lo convalida existe pero no citar fallos específicos sin verificación MCP previa.
+
 ## Datos del Estudio (usar SIEMPRE)
 
 - Abogado: MATÍAS CHRISTIAN GARCÍA CLIMENT
@@ -165,7 +186,7 @@ Nombre: `AMPLIA FUNDAMENTOS INCONSTITUCIONALIDAD - {APELLIDO}.html` en la carpet
 - Párrafos largos y densos, no cortar ideas con saltos innecesarios
 - Términos técnicos: "inconstitucionalidad sobrevenida", "confiscación", "intangibilidad del crédito", "carácter alimentario", "sujeto de preferente tutela"
 - Montos en formato argentino: `$20.244.496,18`
-- NO inventar citas jurisprudenciales fuera del modelo o el expediente
+- **NO inventar citas jurisprudenciales** — ver la "REGLA CRÍTICA INNEGOCIABLE" al inicio del skill. Única cita permitida sin verificación: SCBA "Barrios" C. 124.096.
 - Sanitizar HTML antes de subir al MEV (tildes → entidades)
 
 ## PJN vs SCBA
