@@ -248,16 +248,23 @@ Los subagentes usan `scripts/generar_escrito.py` que:
 
 ### Fase 4: Distribución de borradores
 
+**Regla común CABA + Provincia:** el DOCX SIEMPRE se sube a OneDrive y `borrador_onedrive_url` se popula con esa URL (link SharePoint de `abogadosgc-my.sharepoint.com`). La app (solapa "Caducidad IA") sabe bouncear esa URL privada por un bucket público de Supabase (`borradores-caducidad-ia`) al subirla al portal judicial, así que no hace falta que el skill exponga el DOCX en una URL pública.
+
+⚠️ **IMPORTANTE — NO usar `raw.githubusercontent.com/matiascliment-star/caducidad-borradores/...`**. Ese repo no existe y el backend MCP da 404 al intentar bajar de ahí. Solo URLs de OneDrive/SharePoint del tenant del estudio.
+
 **CABA (PJN no deja editar borradores):**
 - Subir DOCX a OneDrive del expediente en carpeta `Borradores caducidad/{fecha}/`.
-- Incluir link en el WhatsApp de la chica.
-- Enviar el DOCX como adjunto con `wa_send_document` (preview en el celular).
-- NO subir al PJN automáticamente.
+- Setear `borrador_onedrive_url` con el webUrl del archivo en SharePoint.
+- Enviar el DOCX como adjunto al WhatsApp con `wa_send_document` (preview en el celular).
+- NO subir al PJN automáticamente (la chica lo hace desde la solapa "Caducidad IA" o manual).
 
 **Provincia (MEV deja editar borradores):**
-- Subir DOCX como borrador editable al MEV con `scripts/upload_mev_borrador.py` (del skill `subir-escrito-mev`).
-- Copia en OneDrive del expediente.
-- Incluir ambos links en el WA.
+- Subir DOCX a OneDrive del expediente (igual que CABA) → popular `borrador_onedrive_url`.
+- **Opcionalmente**, subir también como borrador editable al MEV con `scripts/upload_mev_borrador.py` (del skill `subir-escrito-mev`) → popular `borrador_mev_id`.
+- Enviar el DOCX como adjunto al WhatsApp.
+- La subida definitiva al portal MEV como borrador la hace la chica desde la solapa "Caducidad IA" (que bouncea la URL de SharePoint a un link público y llama al MCP).
+
+**Por qué no GitHub raw**: requería mantener un repo público con todos los DOCX del estudio, hacer `git commit && git push` desde el skill, y perder control sobre retención y privacidad. OneDrive + bounce por Supabase de 30 días de retención resuelve todo eso sin exponer nada.
 
 ### Fase 5: Armado y envío de WhatsApp
 
