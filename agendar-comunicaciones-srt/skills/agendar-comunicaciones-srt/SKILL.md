@@ -28,7 +28,7 @@ Chequeo diario (L-V 9am AR) de comunicaciones nuevas de Mi Ventanilla con plazo 
 | Constancia Orden Estudio (al cliente) | Fecha estudio directa | Principal | **Sí** (cálido) |
 | Citación Examen Físico | Fecha audiencia directa | Principal | **Sí** (cálido) |
 | Citación Homologación (Teams) | Fecha audiencia directa | Principal | **Sí** (con link) |
-| **Acto Administrativo (Clausura)** | **15d CABA / 15+90d Pcia** | **✱ Vencimientos** | No (el cliente no se entera) |
+| **Acto Administrativo (Clausura)** | **15d CABA / 15+90d Pcia** | **Principal + ✱ Vencimientos** (duplicado) | No (el cliente no se entera) |
 
 Nota: las clausuras también las verifica el skill `control-clausuras-srt` los lunes. Acá se **crean diariamente** apenas llegan, el otro skill **controla** que estén bien agendadas. Dos IAs, un fiscaliza lo de la otra.
 
@@ -289,31 +289,37 @@ def proc_citacion_homologacion(c):
 def proc_clausura(c):
     """Notificación de Acto Administrativo con Clausura en detalle.
     15 días hábiles CABA (CM 10L, CABA), 15+90 días hábiles Pcia BsAs.
-    Va al calendario ✱ Vencimientos (no al principal).
+    Cada plazo se duplica en DOS calendarios: principal (flirteador84) + ✱ Vencimientos.
+    Asi Mara los ve en su agenda normal Y en el calendar dedicado.
     NO manda aviso al cliente (es un plazo interno del estudio).
     """
+    CAL_VENC = 'f98t26v6l01v4ss922e069rid0@group.calendar.google.com'  # ✱ Vencimientos
+    CAL_PRINC = 'flirteador84@gmail.com'                               # principal
     notif = date.fromisoformat(c['fecha_notif'])
     cm = (c.get('cm') or '').upper()
     is_caba = cm in ('CABA', 'CM 10L')
-    # Siempre el 15d
-    f15 = sumar_dh(notif, 15)
     ciudad = 'CABA' if is_caba else (cm or 'PCIA').upper()
-    # Retorna info estructurada que Paso 3 usa para crear los 1-2 eventos
-    eventos = [{
-        'fecha_evento': f15,
-        'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'} - {c['srt']} - VENCE APELAR CLAUSURA (15 DIAS) {ciudad}",
-        'calendar_override': 'f98t26v6l01v4ss922e069rid0@group.calendar.google.com',
-        'colorId_override': '11',
-    }]
+    nombre = c['nombre_actor'] or '(SIN NOMBRE)'
+    srt = c['srt']
+
+    # Para cada plazo generamos 2 eventos (uno por calendar). Paso 3 los crea todos.
+    eventos = []
+    def _dup(fecha, summary, colorId):
+        eventos.append({
+            'fecha_evento': fecha, 'summary': summary,
+            'calendar_override': CAL_VENC, 'colorId_override': colorId,
+        })
+        eventos.append({
+            'fecha_evento': fecha, 'summary': summary,
+            'calendar_override': CAL_PRINC, 'colorId_override': colorId,
+        })
+
+    f15 = sumar_dh(notif, 15)
+    _dup(f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {ciudad}", '11')
     if not is_caba:
         f90 = sumar_dh(notif, 90)
-        eventos.append({
-            'fecha_evento': f90,
-            'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'} - {c['srt']} - VENCE APELAR CLAUSURA (90 DÍAS) {ciudad}",
-            'calendar_override': 'f98t26v6l01v4ss922e069rid0@group.calendar.google.com',
-            'colorId_override': '10',
-        })
-    # Devolvemos el primer evento en fecha_evento + lista completa en 'eventos_extra' para agendar
+        _dup(f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DÍAS) {ciudad}", '10')
+
     return {
         'fecha_evento': eventos[0]['fecha_evento'],
         'summary': eventos[0]['summary'],
