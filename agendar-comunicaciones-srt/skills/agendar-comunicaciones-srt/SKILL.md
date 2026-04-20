@@ -85,7 +85,7 @@ WHERE m.tipo_comunicacion IN (
     'Notificación de Acto Administrativo',  -- clausuras (filtradas por detalle en el procesador)
     'Envío de Comunicación'                 -- prestación dineraria (filtrada por detalle en el procesador)
   )
-  AND COALESCE(m.estado, '') = ''            -- SIN procesar por las chicas en la app (rojas !)
+  AND COALESCE(m.estado, '') <> 'Leído'      -- SIN procesar por las chicas en la app (Leído es la única marca humana válida; "No leído" es ruido del scraper)
   AND m.agendado_en_calendar_at IS NULL      -- SIN procesar por Claude en corridas anteriores
   -- Ventana: hoy + ayer + anteayer (días calendario completos AR).
   -- Ejemplo: si corre el 18/04 a las 9am AR, procesa TODAS las notificaciones
