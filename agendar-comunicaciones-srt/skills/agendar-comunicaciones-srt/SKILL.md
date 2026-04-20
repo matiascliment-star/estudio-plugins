@@ -2,11 +2,11 @@
 name: agendar-comunicaciones-srt
 description: >
   Agendamiento automático diario (L-V 9am AR) de comunicaciones de Mi Ventanilla
-  SRT. Cubre 5 tipos con plazo procesal o fecha de audiencia: (1) Dictamen Médico
-  3 días hábiles, (2) ITM 3 días hábiles, (3) Constancia de Orden de Estudio 5
-  días hábiles para contestar intimación, (4) Citación a Examen Físico agenda la
-  fecha de audiencia + aviso al cliente, (5) Citación al Servicio de Homologación
-  agenda fecha + link Teams + aviso al cliente. Lee el texto extraído de los PDFs
+  SRT. Cubre 4 tipos con plazo procesal o fecha de audiencia: (1) Dictamen Médico
+  3 días hábiles, (2) Constancia de Orden de Estudio 5 días hábiles para
+  contestar intimación, (3) Citación a Examen Físico agenda la fecha de audiencia
+  + aviso al cliente, (4) Citación al Servicio de Homologación agenda fecha +
+  link Teams + aviso al cliente. Las ITMs NO se agendan (no se impugnan). Lee el texto extraído de los PDFs
   (columna `adjuntos_miventanilla.texto_extraido`). Marca cada comunicación como
   procesada. Reporte diario al grupo "Claude SRT". Triggers: "agendar
   comunicaciones SRT", "procesar comunicaciones", "mi ventanilla".
@@ -24,7 +24,6 @@ Chequeo diario (L-V 9am AR) de comunicaciones nuevas de Mi Ventanilla con plazo 
 | Tipo | Plazo / Acción | Calendar | Aviso al cliente |
 |------|----------------|----------|------------------|
 | Dictamen Médico | 3 días hábiles impugnar | Principal | No |
-| ITM | 3 días hábiles impugnar | Principal | No |
 | Constancia Orden Estudio (intimación) | 5 días hábiles contestar | Principal | No |
 | Constancia Orden Estudio (al cliente) | Fecha estudio directa | Principal | **Sí** (cálido) |
 | Citación Examen Físico | Fecha audiencia directa | Principal | **Sí** (cálido) |
@@ -78,7 +77,6 @@ LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
 LEFT JOIN adjuntos_miventanilla a ON a.comunicacion_id = m.id
 WHERE m.tipo_comunicacion IN (
     'Notificación de Dictamen Médico',
-    'Notificación de ITM',
     'Notificación de Constancia de Orden de Estudio',
     'Notificación de Citación',
     'Notificación de Citación al Servicio de Homologación',
@@ -360,7 +358,6 @@ def dispatch_envio_comunicacion(c):
 
 PROCESADORES = {
     'Notificación de Dictamen Médico': lambda c: proc_dictamen_itm(c, 'DICTAMEN MEDICO'),
-    'Notificación de ITM': lambda c: proc_dictamen_itm(c, 'ITM'),
     'Notificación de Constancia de Orden de Estudio': proc_constancia_orden_estudio,
     'Notificación de Citación': proc_citacion_examen,
     'Notificación de Citación al Servicio de Homologación': proc_citacion_homologacion,
@@ -404,7 +401,7 @@ Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia
 - **endTime**: `{fecha_evento}T{HH+1:MM}:00` (1 hora estimada)
 - **colorId**: `'6'` (Tangerine naranja)
 
-**B) Evento all-day** (Dictamen, ITM, Intimación Constancia, Clausura — son plazos, no hora específica):
+**B) Evento all-day** (Dictamen, Intimación Constancia, Clausura — son plazos, no hora específica):
 - **allDay**: true
 - **startTime**: `{fecha_evento}T00:00:00`
 - **endTime**: `{fecha_evento + 2 días}T00:00:00` (pattern Mara)
@@ -487,12 +484,11 @@ def fmt_fecha(s):
         y,m,d = s.split('-'); return f"{d}/{m}"
     except: return s or '?'
 
-dict_itm = grupo('Notificación de Dictamen Médico') + grupo('Notificación de ITM')
-if dict_itm:
-    L.append('\n✅ *DICTAMEN MÉDICO / ITM — plazo 3 hábiles p/ impugnar*')
-    for p in dict_itm:
-        t = 'DICT MED' if 'Dictamen' in p['tipo_comunicacion'] else 'ITM'
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — {t} notificado {fmt_fecha(p.get('fecha_notif'))} → vence impugnar {fmt_fecha(p['fecha_evento'])}")
+dict_med = grupo('Notificación de Dictamen Médico')
+if dict_med:
+    L.append('\n✅ *DICTAMEN MÉDICO — plazo 3 hábiles p/ impugnar*')
+    for p in dict_med:
+        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — DICT MED notificado {fmt_fecha(p.get('fecha_notif'))} → vence impugnar {fmt_fecha(p['fecha_evento'])}")
 
 const = grupo('Notificación de Constancia de Orden de Estudio')
 const_intim = [p for p in const if p.get('subtipo') == 'intimacion_abogado']
