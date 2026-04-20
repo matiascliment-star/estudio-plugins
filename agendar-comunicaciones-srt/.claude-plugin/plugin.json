@@ -1,6 +1,6 @@
 {
   "name": "agendar-comunicaciones-srt",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "Agenda automáticamente las comunicaciones de Mi Ventanilla SRT con plazo procesal. Fase 1.5: Dictámenes Médicos e ITMs (3 días hábiles para impugnar) agenda automático en Calendar, + alerta al grupo para Constancias de Orden de Estudio y Sol Historia Clinica que requieren lectura manual del PDF. Fase 2 (futura, cuando el scraper suba PDFs al bucket): Citaciones + aviso al cliente, Traslado de Apelación y Agravios.",
   "author": {
     "name": "Matias Climent"

@@ -404,7 +404,7 @@ Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia
 **B) Evento all-day** (Dictamen, Intimación Constancia, Clausura — son plazos, no hora específica):
 - **allDay**: true
 - **startTime**: `{fecha_evento}T00:00:00`
-- **endTime**: `{fecha_evento + 2 días}T00:00:00` (pattern Mara)
+- **endTime**: `{fecha_evento + 1 día}T00:00:00` (all-day Google Calendar es end-exclusive → evento de 1 solo día)
 - **colorId**: `item.colorId_override` si existe (clausura 15d=`'11'`, 90d=`'10'`), sino `'6'`
 
 **Común a ambos**:
