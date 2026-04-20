@@ -134,11 +134,66 @@ Cada subagente **Opus 4.7** recibe:
   "critico": true|false,
   "modelo_aplica": "pronto-despacho|intimar-pago|...|NINGUNO",
   "placeholders_modelo": {...} | null,
-  "texto_sugerido_corto": "2-3 oraciones para el WhatsApp, no para el DOCX"
+  "texto_sugerido_corto": "2-3 oraciones para el WhatsApp, no para el DOCX",
+
+  "numero_expediente_destino": "CNT 045396/2019/1",
+  "mev_idc_destino": null,
+  "mev_ido_destino": null,
+  "oficina_destino_label": "JNT Nº3 · Incidente Nº1"
 }
 ```
 
 El `estado_procesal`, `prueba_producida`, `prueba_pendiente`, `obstaculo_actual` y `estrategia_sugerida` se usan en el WhatsApp para dar contexto profundo a la chica. El `accion_inmediata` es lo que le pide que haga hoy.
+
+Los campos `*_destino` indican **exactamente a qué expediente/oficina se sube el borrador** — ver sección "Oficina destino" abajo.
+
+### Oficina destino — cuándo sobrescribir
+
+Cuando el subagente genera un borrador, el frontend de la app (solapa "Caducidad IA") usa estos 4 campos para saber dónde subirlo. La regla madre: **¿el borrador se sube al mismo expediente/oficina que tiene el expediente padre en BD?**
+
+- **Sí** (99% de los casos) → dejar los 4 campos `*_destino` en `null`. El frontend usa `expedientes.numero` (PJN) o `expedientes.mev_idc` + `mev_ido` (SCBA).
+- **No** (incidente / conexo / alzada distinta / radicación actual en otra oficina) → popular:
+
+| Columna | Cuándo | Ejemplo |
+|---|---|---|
+| `numero_expediente_destino` | PJN con número exacto distinto del padre | `"CNT 045396/2019/1"` (incidente Nº1), `"CNT 005177/2020"` (alzada) |
+| `mev_idc_destino` | SCBA, causa distinta del padre (conexo, acumulación) | `"123456"` |
+| `mev_ido_destino` | SCBA, organismo/juzgado distinto del padre | `"301"` |
+| `oficina_destino_label` | **Siempre poblar cuando hay override** — texto humano | `"JNT Nº3 · Incidente Nº1"`, `"CNAT Sala VII · Alzada"`, `"TT Nº6 Lanús tras devolución SCBA"` |
+
+**Casos típicos:**
+
+1. **Incidente vivo mientras principal está en Cámara** (ej: LOPEZ, incidente de ejecución de liquidación en 1ra instancia mientras apelación en Cámara):
+   ```json
+   "numero_expediente_destino": "{padre}/1",
+   "oficina_destino_label": "JNT Nº3 · Incidente Nº1"
+   ```
+
+2. **Principal en 1ra instancia pero `instancia_actual=camara` desactualizado** (ej: CASTILLO):
+   ```json
+   "numero_expediente_destino": "{numero_padre}",
+   "oficina_destino_label": "JNT Nº45 · 1ra instancia"
+   ```
+   Log: en el `texto_sugerido_corto` mencionar al usuario que revise `instancia_actual`.
+
+3. **Alzada normal con llamamiento de autos** (ej: SARAVIA, DUNDO):
+   ```json
+   "numero_expediente_destino": null,
+   "oficina_destino_label": "CNAT Sala VII"
+   ```
+   (No hay override real — el número es el mismo que el padre. Solo popular `oficina_destino_label` como info para la chica.)
+
+4. **SCBA con devolución a TT origen** (ej: MARTI):
+   Si la acción sugerida es EXCLUIR del control, **no generar borrador** (`modelo_aplica="NINGUNO"`, sin `borrador_onedrive_url`). No corresponde subir nada.
+
+5. **Pcia con conexo en otro tribunal por acumulación**:
+   ```json
+   "mev_idc_destino": "...",
+   "mev_ido_destino": "...",
+   "oficina_destino_label": "TT Nº1 Lomas · conexo por acumulación 188 CPCC"
+   ```
+
+**Default:** si no estás 100% seguro, dejá los 4 campos en `null`. El fallback al padre es siempre seguro para el caso base.
 
 ### Fase 2b: Actualizar `resumen_ia` del expediente
 
@@ -273,23 +328,87 @@ La tabla sirve para:
   - 2da vez seguida: `⚠️ Repetido (2 corridas)`.
   - 3ra+: `🔁 Recordatorio — aparece hace N días, sin presentar todavía`.
 
-Tabla `caducidad_corridas` (crear si no existe):
+Tabla `caducidad_corridas` (ya creada; el schema completo actual es):
 
 ```sql
 CREATE TABLE IF NOT EXISTS caducidad_corridas (
   id BIGSERIAL PRIMARY KEY,
   fecha DATE NOT NULL,
   expediente_id BIGINT REFERENCES expedientes(id),
-  responsable_asignada TEXT,  -- Eliana/Mara/Kuki/Paula
+  responsable_asignada TEXT,        -- Eliana/Mara/Kuki/Paula/Clara
+  jurisdiccion TEXT,                -- 'CABA' | 'Provincia'
+  dr INT,                           -- días restantes
   tipo_impulso TEXT,
-  urgencia TEXT,  -- alta/media/baja/no_requiere
+  urgencia TEXT,                    -- critico|alta|media|baja|no_requiere
   critico BOOLEAN DEFAULT FALSE,
-  razon TEXT,
+  contexto TEXT,                    -- texto libre (legacy — ahora usar columnas estructuradas)
+  accion_sugerida TEXT,
+  texto_sugerido TEXT,
   borrador_onedrive_url TEXT,
   borrador_mev_id TEXT,
   presentado BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  presentado_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Análisis estructurado (popular SIEMPRE — el frontend los renderiza como secciones separadas)
+  estado_procesal TEXT,
+  prueba_producida TEXT[],
+  prueba_pendiente TEXT[],
+  obstaculo_actual TEXT,
+  estrategia_sugerida TEXT[],
+  accion_inmediata TEXT,
+
+  -- Oficina destino del borrador (popular SOLO si difiere del expediente padre)
+  numero_expediente_destino TEXT,   -- PJN: ej "CNT 045396/2019/1"
+  mev_idc_destino TEXT,             -- SCBA: id causa si difiere
+  mev_ido_destino TEXT,             -- SCBA: id organismo si difiere
+  oficina_destino_label TEXT,       -- texto humano para UI: "JNT Nº3 · Incidente Nº1"
+
+  UNIQUE (fecha, expediente_id)
 );
+```
+
+**INSERT completo esperado** (ejemplo caso LOPEZ):
+
+```sql
+INSERT INTO caducidad_corridas (
+  fecha, expediente_id, responsable_asignada, jurisdiccion, dr,
+  tipo_impulso, urgencia, critico,
+  accion_sugerida, borrador_onedrive_url,
+  -- análisis estructurado
+  estado_procesal, prueba_producida, prueba_pendiente,
+  obstaculo_actual, estrategia_sugerida, accion_inmediata,
+  -- oficina destino (si aplica override)
+  numero_expediente_destino, oficina_destino_label
+) VALUES (
+  '2026-04-20', 1879, 'Eliana', 'CABA', -29,
+  'pronto-despacho', 'critico', TRUE,
+  'PRONTO DESPACHO ante JNT Nº3 en Incidente Nº1 ...',
+  'https://abogadosgc-my.sharepoint.com/.../pronto-despacho-LOPEZ.docx',
+  'Incidente de ejecución de liquidación',
+  ARRAY['Liquidación 12/12/2025', 'Impugnación PROVINCIA ART 18/12/2025'],
+  ARRAY[]::TEXT[],
+  'Impugnación sin proveer hace 4 meses',
+  ARRAY['Pronto despacho al JNT Nº3', 'Esperar proveimiento', 'Si persiste, reiterar en 30 días'],
+  'Subir PRONTO DESPACHO al Incidente Nº1',
+  'CNT 045396/2019/1', 'JNT Nº3 · Incidente Nº1'
+)
+ON CONFLICT (fecha, expediente_id) DO UPDATE SET
+  tipo_impulso             = EXCLUDED.tipo_impulso,
+  urgencia                 = EXCLUDED.urgencia,
+  critico                  = EXCLUDED.critico,
+  accion_sugerida          = EXCLUDED.accion_sugerida,
+  borrador_onedrive_url    = EXCLUDED.borrador_onedrive_url,
+  estado_procesal          = EXCLUDED.estado_procesal,
+  prueba_producida         = EXCLUDED.prueba_producida,
+  prueba_pendiente         = EXCLUDED.prueba_pendiente,
+  obstaculo_actual         = EXCLUDED.obstaculo_actual,
+  estrategia_sugerida      = EXCLUDED.estrategia_sugerida,
+  accion_inmediata         = EXCLUDED.accion_inmediata,
+  numero_expediente_destino= EXCLUDED.numero_expediente_destino,
+  mev_idc_destino          = EXCLUDED.mev_idc_destino,
+  mev_ido_destino          = EXCLUDED.mev_ido_destino,
+  oficina_destino_label    = EXCLUDED.oficina_destino_label;
 ```
 
 Cada subagente al finalizar inserta su fila. Así tenemos auditoría completa y podemos medir:
