@@ -78,7 +78,7 @@
     },
     {
       "name": "control-clausuras-srt",
-      "version": "1.7.0",
+      "version": "2.0.0",
       "source": "./control-clausuras-srt",
       "description": "Control semanal de Disposiciones de Clausura SRT: verifica Google Calendar, auto-agenda faltantes, reporta por WhatsApp al grupo Control Dispos SRT",
       "author": { "name": "Matias Climent" }
