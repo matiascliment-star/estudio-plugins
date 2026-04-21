@@ -81,10 +81,26 @@ Extraer los porcentajes regulados por Cámara (o por 1ra inst. si no hubo apelac
 ### Paso 3: Obtener datos para el cálculo
 
 #### Si es RIPTE
-1. Buscar índice RIPTE de la fecha del accidente en https://ripte.agjusneuquen.gob.ar/riptes
-2. Buscar último RIPTE publicado (mismo sitio)
-3. Calcular meses de retraso: meses entre último RIPTE publicado y fecha de liquidación
-4. Buscar RIPTE de X meses antes del accidente (para tabla de mitigación)
+
+**FUENTE OFICIAL PRIMARIA — PDF del Ministerio de Trabajo**:
+- Portal: https://www.argentina.gob.ar/trabajo/seguridadsocial/ripte
+- **PDF con serie histórica completa** (desde julio 1994 hasta el último publicado): patrón `https://www.argentina.gob.ar/sites/default/files/ripte_[mes]_[año]-mdch.pdf` (ej: `ripte_febrero_2026-mdch.pdf`).
+- Es la fuente oficial que se actualiza cada mes. **Usar siempre esta primero.** Contiene TODOS los índices históricos en un solo PDF.
+- Columnas del PDF: `Período | Monto en $ | Variación % | Índice Base 07/94 = 100 | RIPTE - Índice No Decreciente Base 07/94 = 100 (uso exclusivo Riesgos del Trabajo)`.
+- Para liquidaciones de accidentes de trabajo (Ley 24.557 / 27.348 / Decreto 669/19) **usar la 5ta columna** ("RIPTE - Índice No Decreciente") porque es la oficial de la SRT. En la práctica reciente es numéricamente idéntica a la 4ta; solo difieren cuando hubo deflación mensual histórica.
+- **NO usar la columna "Monto en $"** — es la remuneración promedio en pesos, distinta escala.
+
+**Procedimiento**:
+1. Fetchear el PDF del Ministerio del mes actual. Si falla (404), probar meses anteriores (el último publicado tiene ~45 días de atraso).
+2. Leer el PDF y extraer:
+   - Índice RIPTE del mes del accidente/primera manifestación invalidante
+   - Último índice RIPTE publicado (última fila del PDF)
+   - Índice RIPTE del mes de mitigación (meses anteriores al accidente igual al retraso)
+3. Calcular meses de retraso entre último RIPTE publicado y fecha de liquidación.
+
+**Fuentes alternativas (si el PDF del Ministerio no está disponible)**:
+- https://ripte.agjusneuquen.gob.ar/riptes (AGJ Neuquén — tarda 1-2 meses más)
+- https://ikiwi.net.ar/indice-ripte/ (backup)
 
 #### Si es Tasa Activa/Pasiva
 1. Usar `cpacf_calcular_intereses` con los parámetros correspondientes
@@ -211,6 +227,16 @@ Cálculo de mitigación:
 Ejemplo: accidente 10/2019, último RIPTE publicado 01/2026, liquidación 03/2026
 - Retraso: 2 meses
 - RIPTE mitigado: 08/2019 (10/2019 - 2 meses)
+
+#### Cita jurisprudencial OBLIGATORIA en la sección II (medidas mitigatorias)
+
+**SIEMPRE** incluir como primer párrafo de la sección II la siguiente cita (en cursiva el nombre del fallo):
+
+> Que resulta pertinente señalar que en diversos fallos —ver autos *"BAREIRO, EVER RAMON c/ SWISS MEDICAL ART S.A. s/RECURSO LEY 27348"* (Expte. N° 25349/2023), entre otros— la Excma. Cámara Nacional de Apelaciones del Trabajo ha establecido expresamente que corresponde al juez de la causa adoptar las medidas necesarias para mitigar los efectos adversos derivados del retraso en la publicación de los índices R.I.P.T.E., reconociendo así la facultad-deber del magistrado de primera instancia de implementar los mecanismos compensatorios que resulten apropiados para preservar la integridad del crédito laboral.
+
+Seguido del párrafo que explica la problemática del retraso, el mecanismo compensatorio propuesto (tomar RIPTE de `fecha_accidente - meses_retraso`) y el fundamento constitucional (art. 17 CN, principios protectorios, progresividad).
+
+Esta cita es **obligatoria** — sin ella la sección II pierde sustento jurídico y puede ser rechazada. Modelo completo en `templates/modelo_liquidacion_ripte.docx`.
 
 ### Paso 6: Variantes según tipo de interés/actualización
 
@@ -449,9 +475,17 @@ NO preguntar cosas que se pueden deducir de la sentencia (tasa, capital, fechas)
 
 ## Fuentes de datos RIPTE
 
-- Tabla completa: https://ripte.agjusneuquen.gob.ar/riptes (usar WebFetch)
-- Oficial: https://www.argentina.gob.ar/trabajo/seguridadsocial/ripte
-- Backup: https://calcularsueldo.com.ar/ripte
+**FUENTE OFICIAL PRIMARIA**: PDF del Ministerio de Trabajo con serie histórica completa.
+- URL portal: https://www.argentina.gob.ar/trabajo/seguridadsocial/ripte
+- **URL PDF directo** (patrón): `https://www.argentina.gob.ar/sites/default/files/ripte_[mes]_[año]-mdch.pdf`
+  - Ejemplos: `ripte_febrero_2026-mdch.pdf`, `ripte_enero_2026-mdch.pdf`, `ripte_diciembre_2025-mdch.pdf`
+  - El mes en minúsculas en español sin tildes, el año con 4 dígitos.
+- El PDF contiene TODOS los índices desde julio 1994. Columnas: Período | Monto $ | Var % | **Índice Base 07/94=100** | **RIPTE Índice No Decreciente** (esta última es la oficial SRT — usar esta).
+
+**Alternativas si el PDF del Ministerio falla**:
+- https://ripte.agjusneuquen.gob.ar/riptes (AGJ Neuquén — atraso 1-2 meses)
+- https://ikiwi.net.ar/indice-ripte/ (backup histórico)
+- https://calcularsueldo.com.ar/ripte (otro backup)
 
 ## Fuente de datos UMA
 
