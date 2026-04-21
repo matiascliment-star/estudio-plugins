@@ -1,6 +1,6 @@
 {
   "name": "estudio-plugins",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Plugins del Estudio García Climent para Cowork",
   "owner": {
     "name": "Estudio García Climent"
@@ -92,9 +92,16 @@
     },
     {
       "name": "control-caducidad",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "./control-caducidad",
-      "description": "Corrida diaria de control de caducidad de instancia (L-V 7am AR): selecciona top 20 CABA + top 20 Pcia más urgentes, analiza con subagentes, genera borradores DOCX de escritos de fórmula en OneDrive y manda 4 WhatsApp (uno por chica: Eliana, Mara, Kuki, Paula) + resumen ejecutivo a Matías con los CRÍTICOS del día",
+      "description": "Corrida diaria de control de caducidad de instancia (L-V 7am AR): selecciona top 20 CABA + top 30 Pcia más urgentes, analiza con subagentes, genera borradores DOCX de escritos de fórmula en OneDrive y manda 4 WhatsApp (uno por chica: Eliana, Mara, Kuki, Paula) + resumen ejecutivo a Matías con los CRÍTICOS del día. Excluye expedientes en ejecución (7X) porque los maneja control-liquidacion.",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "control-liquidacion",
+      "version": "1.0.0",
+      "source": "./control-liquidacion",
+      "description": "Corrida diaria de control de ejecución de sentencia (estados 70–76, L-V 7:30am AR): 3 expedientes más urgentes por sub-estado CABA (= 21) + top de Provincia. Analiza con subagentes, genera borradores DOCX (pronto despacho aprobación, intimar pago, pedir embargo, reiterar giro, pedir regulación honorarios), sube a OneDrive/MEV y manda WhatsApp por responsable + resumen ejecutivo a Matías con los CRÍTICOS.",
       "author": { "name": "Matias Climent" }
     }
   ]

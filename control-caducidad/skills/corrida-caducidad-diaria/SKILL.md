@@ -41,7 +41,9 @@ Supabase project `wdgdbbcwcrirpnfdmykh`. La query calcula `dr = plazo - (hoy - f
 - `fecha_ref = MAX(ultimo_impulso_propio, último movimiento real, último click válido)`
 - `plazo = expedientes.plazo_caducidad` (si está), sino por default: Cámara=90, CABA 1ra=180, resto=90.
 
-**Click válido** (de `impulsos_caducidad`): click con escrito asociado, O click sin escrito pero hace ≤5 días (plazo de gracia del sistema PJN/MEV para asociar escrito al click). Después de 5 días sin asociar, el click se considera "vencido" y deja de contar.
+**Click válido** (de `impulsos_caducidad`): click con escrito asociado, O click sin escrito pero hace ≤7 días (plazo de gracia del sistema PJN/MEV para asociar escrito al click). Después de 7 días sin asociar, el click se considera "vencido" y deja de contar.
+
+**Exclusión de ejecución**: expedientes con `estado` que empieza con 70–76 se excluyen porque los maneja el plugin `control-liquidacion` (corrida de liquidación). Evita doble procesamiento.
 
 ```sql
 WITH ult_mov AS (
@@ -54,7 +56,7 @@ ult_click AS (
   SELECT expediente_id, MAX(fecha_click) AS fecha
   FROM impulsos_caducidad
   WHERE escrito_id IS NOT NULL                      -- click con escrito asociado
-     OR fecha_click > CURRENT_DATE - INTERVAL '5 days'  -- o click sin escrito pero dentro del plazo de gracia
+     OR fecha_click > CURRENT_DATE - INTERVAL '7 days'  -- o click sin escrito pero dentro del plazo de gracia
   GROUP BY expediente_id
 ),
 base AS (
@@ -79,6 +81,7 @@ base AS (
   WHERE COALESCE(e.excluido_caducidad, false) = false
     AND COALESCE(e.excluido_caducidad_temporal, false) = false
     AND e.estado IS DISTINCT FROM '80 Finalizado'
+    AND LEFT(e.estado, 2) NOT IN ('70','71','72','73','74','75','76')
     AND e.acumulado_con IS NULL
     AND e.jurisdiccion IN ('CABA','Provincia')
 ),
