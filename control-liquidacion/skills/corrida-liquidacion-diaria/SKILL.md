@@ -312,14 +312,35 @@ correspondiente. Guarda en `/tmp/liquidacion/{fecha}/{numero_safe}_{tipo}.docx`.
 
 ### Fase 5: Distribución de borradores
 
+**Regla madre (CABA + Provincia):** todo DOCX generado SIEMPRE se sube a OneDrive del expediente en la carpeta `Borradores liquidación/{fecha}/` usando `scripts/upload_onedrive.py`, y `borrador_onedrive_url` se popula con el `webUrl` devuelto por Microsoft Graph (link `https://abogadosgc-my.sharepoint.com/...`).
+
+**Invocación del script** (ejemplo):
+
+```bash
+python3 scripts/upload_onedrive.py \
+  --onedrive-id "{expediente.onedrive_id}" \
+  --subpath "Borradores liquidación/{fecha}/{numero_safe}_{tipo_accion}.docx" \
+  --file "/tmp/liquidacion/{fecha}/{numero_safe}_{tipo_accion}.docx"
+```
+
+Devuelve JSON `{"webUrl": "...", "id": "...", "name": "..."}`. Usar `webUrl` como valor de `borrador_onedrive_url`.
+
+⚠️ **REGLAS DURAS para `borrador_onedrive_url`** (no violarlas — el frontend valida http/https y muestra "Sin borrador cargado" a las chicas si no se cumple):
+
+1. **Solo URLs https** del tenant del estudio (`abogadosgc-my.sharepoint.com/...`). Nunca otro dominio.
+2. **Nunca paths locales** (`/tmp/...`, `/home/user/...`, `file://...`). Si el upload falla, dejar `NULL` — **NO** usar el path local como fallback.
+3. **Si el expediente no tiene `onedrive_id`** (campo NULL en `expedientes`): no ejecutar el upload. Dejar `borrador_onedrive_url = NULL` y poblar `contexto` con `"⚠️ Sin carpeta OneDrive para este expediente — pedir a Matías que la genere."`.
+4. **Si el script tira excepción** (token vencido, quota, carpeta inexistente, etc.): capturar el error, dejar `borrador_onedrive_url = NULL`, y loguear en `contexto` algo como `"⚠️ Upload OneDrive falló: {mensaje error corto}"`.
+5. **Nunca GitHub raw** (`raw.githubusercontent.com/...`): el backend MCP da 404 al intentar bajarlo.
+
 **CABA:**
-- Subir a OneDrive del expediente en carpeta `Borradores liquidación/{fecha}/`.
+- Upload a OneDrive (`borrador_onedrive_url`).
 - Link al WA + adjunto en el mensaje de la chica.
 - NO subir a PJN (no edita).
 
 **Provincia:**
-- Subir como borrador editable al MEV (skill `subir-escrito-mev`).
-- Copia en OneDrive.
+- Upload a OneDrive (`borrador_onedrive_url`) — mismo flujo que CABA.
+- **Opcionalmente**, también subir como borrador editable al MEV con skill `subir-escrito-mev` → popular `borrador_mev_id`.
 - Ambos links al WA.
 
 ### Fase 6: Mensaje WhatsApp por chica

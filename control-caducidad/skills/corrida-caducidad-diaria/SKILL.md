@@ -254,9 +254,26 @@ Los subagentes usan `scripts/generar_escrito.py` que:
 
 ### Fase 4: Distribución de borradores
 
-**Regla común CABA + Provincia:** el DOCX SIEMPRE se sube a OneDrive y `borrador_onedrive_url` se popula con esa URL (link SharePoint de `abogadosgc-my.sharepoint.com`). La app (solapa "Caducidad IA") sabe bouncear esa URL privada por un bucket público de Supabase (`borradores-caducidad-ia`) al subirla al portal judicial, así que no hace falta que el skill exponga el DOCX en una URL pública.
+**Regla común CABA + Provincia:** el DOCX SIEMPRE se sube a OneDrive y `borrador_onedrive_url` se popula con la `webUrl` devuelta por Microsoft Graph (link SharePoint de `abogadosgc-my.sharepoint.com`). La app (solapa "Caducidad IA") sabe bouncear esa URL privada por un bucket público de Supabase (`borradores-caducidad-ia`) al subirla al portal judicial, así que no hace falta que el skill exponga el DOCX en una URL pública.
 
-⚠️ **IMPORTANTE — NO usar `raw.githubusercontent.com/matiascliment-star/caducidad-borradores/...`**. Ese repo no existe y el backend MCP da 404 al intentar bajar de ahí. Solo URLs de OneDrive/SharePoint del tenant del estudio.
+**Invocación del script** (después de generar el DOCX con `scripts/generar_escrito.py`):
+
+```bash
+python3 scripts/upload_onedrive.py \
+  --onedrive-id "{expediente.onedrive_id}" \
+  --subpath "Borradores caducidad/{fecha}/{numero_safe}_{tipo_impulso}.docx" \
+  --file "/tmp/caducidad/{fecha}/{numero_safe}_{tipo_impulso}.docx"
+```
+
+Devuelve JSON `{"webUrl": "...", "id": "...", "name": "..."}`. Usar `webUrl` como valor de `borrador_onedrive_url`.
+
+⚠️ **REGLAS DURAS para `borrador_onedrive_url`** — el frontend valida http/https y muestra "Sin borrador cargado" a las chicas si no se cumple. Historial: 2026-04-18 y 21 los subagentes guardaron paths `/home/user/caducidad-borradores/...` en este campo y rompieron el UI para esos casos.
+
+1. **Solo URLs https** del tenant del estudio (`abogadosgc-my.sharepoint.com/...`). Nunca otro dominio.
+2. **NUNCA paths locales** (`/tmp/...`, `/home/user/...`, `file://...`). Si el upload falla, dejar `NULL` — **NO** usar el path local como fallback.
+3. **Si el expediente no tiene `onedrive_id`** (campo NULL en `expedientes`): no ejecutar el upload. Dejar `borrador_onedrive_url = NULL` y anotar en `contexto` `"⚠️ Sin carpeta OneDrive para este expediente — pedir a Matías que la genere."`.
+4. **Si `upload_onedrive.py` tira excepción** (token vencido, quota, carpeta inexistente, etc.): capturar el error, dejar `borrador_onedrive_url = NULL`, y loguear en `contexto` `"⚠️ Upload OneDrive falló: {mensaje error corto}"`.
+5. **NUNCA `raw.githubusercontent.com/matiascliment-star/caducidad-borradores/...`**. Ese repo no existe y el backend MCP da 404 al intentar bajar de ahí.
 
 **CABA (PJN no deja editar borradores):**
 - Subir DOCX a OneDrive del expediente en carpeta `Borradores caducidad/{fecha}/`.
