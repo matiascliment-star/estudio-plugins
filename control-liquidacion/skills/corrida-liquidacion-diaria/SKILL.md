@@ -144,24 +144,35 @@ sub-estado más avanzado.
 ### Fase 2: Asignación de responsables
 
 La liquidación la hacen **solo Matías y Noe** (a diferencia de Caducidad que
-reparte entre Eliana, Mara, Kuki, Paula). Split: **Matías (10) + Noe (11)**
-del total de ~21 CABA.
+reparte entre Eliana, Mara, Kuki, Paula). Split **parejo**: cada uno agarra
+un mix de todos los sub-estados, no los tipos difíciles concentrados en una persona.
 
-**Asignación por sub-estado:**
+**Regla: alternar dentro de cada sub-estado.**
+Los 21 expedientes CABA ordenados por sub-estado (70→76) y después por días sin
+empuje descendente se asignan alternadamente empezando por **Noe**:
 
-- **Matías** (cálculos fuertes + honorarios propios) — **10 expedientes**:
-  - Todo 70 Practicar liquidación (3)
-  - Todo 75 Intereses (3)
-  - Todo 76 Regulación honorarios (3)
-  - 1 del sub-estado 71 (el más urgente) — para llegar a 10
+- Posiciones 1, 3, 5, 7, … (impares) → **Noe**
+- Posiciones 2, 4, 6, 8, … (pares)   → **Matías**
 
-- **Noe** (seguimiento operativo) — **11 expedientes**:
-  - 2 restantes de 71 Liquidación practicada
-  - Todo 72 Pedimos embargo (3)
-  - Todo 73 Giro actor ordenado (3)
-  - Todo 74 Giro nuestro ordenado (3)
+Resultado: **Noe 11 / Matías 10**. Cada uno ve 1–2 expedientes de cada sub-estado
+(70, 71, 72, 73, 74, 75, 76), así ninguno queda sobrecargado con los cálculos
+fuertes (70/75) ni con los seguimientos operativos (72/73/74).
 
-**Provincia**: mismo criterio semántico (70/75/76 → Matías; 71/72/73/74 → Noe).
+Ejemplo concreto:
+
+| Orden | Sub-estado | Asignado |
+|------:|-----------|----------|
+| 1 | 70 | Noe    |
+| 2 | 70 | Matías |
+| 3 | 70 | Noe    |
+| 4 | 71 | Matías |
+| 5 | 71 | Noe    |
+| 6 | 71 | Matías |
+| 7 | 72 | Noe    |
+| … | …  | …      |
+| 21| 76 | Noe    |
+
+**Provincia**: mismo alternado 1-1 empezando por Noe.
 
 **Teléfonos WhatsApp** (producción):
 - Matías → `16393940416`
@@ -276,8 +287,8 @@ sin abrir el expediente.
 *RESUMEN EJECUTIVO LIQUIDACIÓN — {fecha}*
 
 🚨 CRÍTICOS: {total}
-- Matías (70/75/76 + 1 del 71): {n}
-- Noe (resto 71, 72, 73, 74): {n}
+- Matías: {n} expedientes
+- Noe: {n} expedientes
 
 💰 Monto pendiente identificado en críticos: {SUMA}
 
