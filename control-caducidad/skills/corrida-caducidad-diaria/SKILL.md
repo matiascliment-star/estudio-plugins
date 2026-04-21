@@ -430,13 +430,13 @@ Cada subagente al finalizar inserta su fila. Así tenemos auditoría completa y 
 
 Durante prueba → todo al `5491140439075` (Matías).
 
-Para producción (pedir mapeo a Matías cuando apruebe):
+Para producción:
 ```
-Eliana → 549XX...
-Mara   → 549XX...
-Kuki   → 549XX...
-Paula  → 549XX...
-Clara  → 549XX...
+Eliana → 5491155681611
+Mara   → 5491150547137
+Kuki   → 549XX...      (pedir a Matías)
+Paula  → 549XX...      (pedir a Matías)
+Clara  → 549XX...      (pedir a Matías)
 ```
 
 Guardar en `reference_caducidad_asignaciones.md` en memoria.

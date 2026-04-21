@@ -143,16 +143,32 @@ sub-estado más avanzado.
 
 ### Fase 2: Asignación de responsables
 
-Mismo criterio que Caducidad pero adaptado: liquidación es trabajo más técnico
-y normalmente lo hace Matías o Mara. Provisorio:
+La liquidación la hacen **solo Matías y Noe** (a diferencia de Caducidad que
+reparte entre Eliana, Mara, Kuki, Paula). Split: **Matías (10) + Noe (11)**
+del total de ~21 CABA.
 
-- CABA 70 / 75 (practicar liquidación / intereses) → **Matías** (requiere cálculo)
-- CABA 71 / 72 → **Mara**
-- CABA 73 / 74 (giros) → **Eliana**
-- CABA 76 → **Mara**
-- Provincia (todos) → **Kuki**
+**Asignación por sub-estado:**
 
-Durante prueba todos los WA van a Matías etiquetados.
+- **Matías** (cálculos fuertes + honorarios propios) — **10 expedientes**:
+  - Todo 70 Practicar liquidación (3)
+  - Todo 75 Intereses (3)
+  - Todo 76 Regulación honorarios (3)
+  - 1 del sub-estado 71 (el más urgente) — para llegar a 10
+
+- **Noe** (seguimiento operativo) — **11 expedientes**:
+  - 2 restantes de 71 Liquidación practicada
+  - Todo 72 Pedimos embargo (3)
+  - Todo 73 Giro actor ordenado (3)
+  - Todo 74 Giro nuestro ordenado (3)
+
+**Provincia**: mismo criterio semántico (70/75/76 → Matías; 71/72/73/74 → Noe).
+
+**Teléfonos WhatsApp** (producción):
+- Matías → `16393940416`
+- Noe → `5491131586965`
+
+Durante prueba todos los WA van a Matías etiquetados con el nombre de la
+destinataria esperada. Cuando Matías apruebe, usar los JIDs reales arriba.
 
 ### Fase 3: Lanzar subagentes en tandas paralelas de 8
 
@@ -260,10 +276,8 @@ sin abrir el expediente.
 *RESUMEN EJECUTIVO LIQUIDACIÓN — {fecha}*
 
 🚨 CRÍTICOS: {total}
-- Matías (cálculos): {n}
-- Mara (aprobaciones/embargos): {n}
-- Eliana (giros): {n}
-- Kuki (Pcia): {n}
+- Matías (70/75/76 + 1 del 71): {n}
+- Noe (resto 71, 72, 73, 74): {n}
 
 💰 Monto pendiente identificado en críticos: {SUMA}
 
@@ -280,8 +294,8 @@ sin abrir el expediente.
 🔁 Repetidos (≥3 corridas): {n} (revisar manualmente)
 ```
 
-Durante prueba, todos los WA van al `5491140439075` (Matías) etiquetados con
-el nombre de la destinataria.
+Durante prueba, todos los WA van al `16393940416` (Matías) etiquetados con
+el nombre de la destinataria (Noe si corresponde).
 
 ### Fase 8: Logueo en Supabase
 
