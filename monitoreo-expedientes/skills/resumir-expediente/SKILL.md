@@ -199,16 +199,60 @@ PROXIMO PASO: [qué hay que hacer]
 ULTIMO MOVIMIENTO: [fecha] - [descripcion]
 ```
 
-### Paso 4: Guardar en Supabase
+### Paso 4: Extraer montos estructurados (solo para ejecución 7X)
+
+Si el expediente está en estado de ejecución (`estado` empieza con 70–76), además del
+texto narrativo hay que **extraer 3 montos numéricos** y guardarlos en columnas
+dedicadas para que la solapa "Liquidación" pueda mostrarlos y ordenarlos.
+
+**Campos a poblar:**
+
+- `monto_capital_sentencia` — capital que la sentencia firme reconoció al actor. **Es fijo
+  para el expediente, no cambia con el sub-estado**. En CABA puede ser el de 1ra instancia
+  si no apelamos, o el de Cámara si hubo apelación.
+- `monto_pendiente_actor` — lo que al actor le falta cobrar HOY.
+- `monto_pendiente_honorarios` — lo que al estudio le falta cobrar HOY.
+- `moneda` — normalmente 'ARS'.
+
+**Reglas por sub-estado para `monto_pendiente_actor`:**
+
+| Estado | Pendiente actor |
+|--------|-----------------|
+| 70 Practicar liquidación | Capital de sentencia firme |
+| 71 Liquidación practicada | Total de la liquidación practicada |
+| 72 Pedimos embargo | Total liquidación − depositado parcial (si hubo) |
+| 73 Giro actor ordenado | Intereses pendientes de liquidar (el capital ya se cobró o se está cobrando) |
+| 74 Giro nuestro ordenado | Intereses pendientes (el actor ya cobró el capital) |
+| 75 Intereses | Intereses devengados pendientes de liquidar |
+| **76 Regulación honorarios** | **0 / NULL** — el actor ya cobró todo (capital + intereses) |
+
+**Reglas por sub-estado para `monto_pendiente_honorarios`:**
+
+| Estado | Pendiente honorarios |
+|--------|----------------------|
+| 70–75 | Honorarios principales pendientes (estimados o regulados, no cobrados todavía) |
+| **76 Regulación honorarios** | **Honorarios de ejecución o de incidentes** (los honorarios principales ya los cobramos; acá quedan solo los adicionales por el trabajo de ejecutar la sentencia o por incidentes específicos) |
+
+Si algún monto no se puede extraer con confianza, dejarlo en `NULL` (preferible a inventar).
+
+### Paso 5: Guardar en Supabase
 
 ```sql
 UPDATE expedientes SET
   resumen_ia = '[el resumen generado]',
+  monto_capital_sentencia = [numero o NULL],
+  monto_pendiente_actor = [numero o NULL],
+  monto_pendiente_honorarios = [numero o NULL],
+  moneda = 'ARS',
+  monto_actualizado_at = now(),
   ultima_revision_auto = now()
 WHERE id = [expediente_id];
 ```
 
-### Paso 5: Confirmar al usuario
+Para expedientes que NO están en 7X, omitir los 4 campos de monto (dejar el UPDATE
+solo con `resumen_ia` y `ultima_revision_auto`).
+
+### Paso 6: Confirmar al usuario
 
 1. Mostrar el resumen generado
 2. Preguntar si quiere ajustar algo
