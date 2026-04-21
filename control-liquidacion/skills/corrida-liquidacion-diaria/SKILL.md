@@ -241,7 +241,7 @@ Ejemplo concreto:
 
 **Teléfonos WhatsApp** (producción):
 - Matías → `16393940416`
-- Noe → `5491131586965`
+- Noe → `5491131566965`
 
 Durante prueba todos los WA van a Matías etiquetados con el nombre de la
 destinataria esperada. Cuando Matías apruebe, usar los JIDs reales arriba.
