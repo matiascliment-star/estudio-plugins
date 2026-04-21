@@ -365,19 +365,37 @@ el nombre de la destinataria (Noe si corresponde).
 
 ### Fase 8: Logueo en Supabase
 
+**Importante — numeración de corridas del día:**
+
+Antes de insertar las filas del día, calcular el próximo `numero_corrida` de esta (fecha, tipo_corrida):
+
+```sql
+SELECT COALESCE(MAX(numero_corrida), 0) + 1 AS proximo
+FROM liquidacion_corridas
+WHERE fecha = CURRENT_DATE AND tipo_corrida = 'urgencia'; -- o 'monto' según variante
+```
+
+Capturar también un `hora_inicio` = `now()` compartido por todas las filas del batch.
+
+Todas las filas de la corrida se insertan con el mismo `numero_corrida` y `hora_inicio`.
+
 Insertar fila por cada expediente en `liquidacion_corridas`:
 
 ```sql
 INSERT INTO liquidacion_corridas (
-  fecha, expediente_id, responsable_asignada, jurisdiccion,
+  fecha, tipo_corrida, numero_corrida, hora_inicio,
+  expediente_id, responsable_asignada, jurisdiccion,
   sub_estado, sub_estado_label, dias_sin_empuje,
-  monto_pendiente_cobro, monto_capital_sentencia, moneda,
+  monto_pendiente_actor, monto_pendiente_honorarios, monto_capital_sentencia, moneda,
   urgencia, critico, tipo_accion, accion_sugerida, texto_sugerido, contexto,
   estado_procesal, pagos_recibidos, pagos_pendientes,
   obstaculo_actual, estrategia_sugerida, accion_inmediata,
   numero_expediente_destino, mev_idc_destino, mev_ido_destino, oficina_destino_label,
   borrador_onedrive_url, borrador_mev_id
-) VALUES (...);
+) VALUES (
+  CURRENT_DATE, 'urgencia' | 'monto', <proximo_numero>, <hora_inicio_batch>,
+  ...
+);
 ```
 
 Igual que Caducidad, **la tabla NO filtra**. El skill toma siempre el top por

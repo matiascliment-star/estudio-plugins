@@ -329,7 +329,21 @@ Estructura del mensaje ejecutivo a Matías:
 
 ### Fase 6: Logueo en Supabase
 
-**Importante:** la tabla NO filtra. El skill toma siempre el top 20 por `dr` real — si un expediente sigue crítico porque nadie lo presentó, vuelve a aparecer mañana con un indicador de "repetido". Esto es a propósito: evita olvidar un crítico por bug de tracking y presiona sanamente a la chica sobre los casos arrastrados. La única salida real de la lista es presentar el escrito (cambia `ultimo_movimiento`) o excluirlo con `excluido_caducidad=true` en la app.
+**Importante — numeración de corridas del día:**
+
+Antes de insertar, calcular el próximo `numero_corrida` del día:
+
+```sql
+SELECT COALESCE(MAX(numero_corrida), 0) + 1 AS proximo
+FROM caducidad_corridas WHERE fecha = CURRENT_DATE;
+```
+
+Capturar también `hora_inicio = now()` compartido por todas las filas del batch.
+Todas las filas de la corrida se insertan con el mismo `numero_corrida` + `hora_inicio`.
+
+Esto permite distinguir dos corridas del mismo día (p.ej. si se corre manual una segunda vez): la primera queda como `#1`, la siguiente como `#2`.
+
+**La tabla NO filtra**: el skill toma siempre el top 20 por `dr` real — si un expediente sigue crítico porque nadie lo presentó, vuelve a aparecer mañana con un indicador de "repetido". Esto es a propósito: evita olvidar un crítico por bug de tracking y presiona sanamente a la chica sobre los casos arrastrados. La única salida real de la lista es presentar el escrito (cambia `ultimo_movimiento`) o excluirlo con `excluido_caducidad=true` en la app.
 
 La tabla sirve para:
 - Auditoría / métricas.
@@ -344,6 +358,8 @@ Tabla `caducidad_corridas` (ya creada; el schema completo actual es):
 CREATE TABLE IF NOT EXISTS caducidad_corridas (
   id BIGSERIAL PRIMARY KEY,
   fecha DATE NOT NULL,
+  numero_corrida INT,               -- secuencial dentro del día (1, 2, ...)
+  hora_inicio TIMESTAMPTZ,          -- timestamp del batch (compartido por todas las filas de la corrida)
   expediente_id BIGINT REFERENCES expedientes(id),
   responsable_asignada TEXT,        -- Eliana/Mara/Kuki/Paula/Clara
   jurisdiccion TEXT,                -- 'CABA' | 'Provincia'
@@ -382,7 +398,8 @@ CREATE TABLE IF NOT EXISTS caducidad_corridas (
 
 ```sql
 INSERT INTO caducidad_corridas (
-  fecha, expediente_id, responsable_asignada, jurisdiccion, dr,
+  fecha, numero_corrida, hora_inicio,
+  expediente_id, responsable_asignada, jurisdiccion, dr,
   tipo_impulso, urgencia, critico,
   accion_sugerida, borrador_onedrive_url,
   -- análisis estructurado
