@@ -80,7 +80,10 @@ base AS (
   LEFT JOIN ult_click uc ON uc.expediente_id = e.id
   WHERE COALESCE(e.excluido_caducidad, false) = false
     AND COALESCE(e.excluido_caducidad_temporal, false) = false
-    AND e.estado IS DISTINCT FROM '80 Finalizado'
+    -- Excluir todos los estados terminales (80-84): Finalizado, Conciliado,
+    -- Revocado/Renunciamos, Acumulado, Archivado. Ya no requieren seguimiento.
+    AND LEFT(e.estado, 2) NOT IN ('80','81','82','83','84')
+    -- Y excluir expedientes en ejecución (70-76), los maneja control-liquidacion.
     AND LEFT(e.estado, 2) NOT IN ('70','71','72','73','74','75','76')
     AND e.acumulado_con IS NULL
     AND e.jurisdiccion IN ('CABA','Provincia')
