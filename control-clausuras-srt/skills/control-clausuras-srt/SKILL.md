@@ -58,9 +58,9 @@ SELECT
   (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_dispo,
   c.nombre,
   c.comision_medica AS cm,
-  LEFT(a.texto_extraido, 6000) AS texto_clausura,
+  a.texto_extraido AS texto_clausura,
   -- fallback si el PDF de la clausura aún no tiene texto extraído
-  (SELECT LEFT(a2.texto_extraido, 6000)
+  (SELECT a2.texto_extraido
    FROM adjuntos_miventanilla a2
    JOIN comunicaciones_miventanilla m2 ON m2.id = a2.comunicacion_id
    WHERE m2.srt_expediente_nro = m.srt_expediente_nro
@@ -650,29 +650,24 @@ El skill solo tiene que **generar el reporte y meterlo en el INSERT del Paso 7**
 
 ### Paso 7 — Guardar run en Supabase (dispara WhatsApp automáticamente)
 
-INSERT en `control_clausuras_runs`. Un trigger de Supabase (`trg_control_clausuras_wa`) detecta el INSERT, lee `reporte_texto` y lo manda por WhatsApp via pg_net + edge function `wa-send`.
-
-```sql
-INSERT INTO control_clausuras_runs (
-  total_clausuras, agendados_hoy, criticos, vencidos_sin_evento,
-  sin_caso_srt, agendados_ult_semana, errores, reporte_texto
-) VALUES (
-  $total,
-  $agendados_hoy_jsonb,     -- /tmp/agendados_reales.json (eventos auto-creados)
-  $criticos_jsonb,          -- fecha + color + jurisdicción + duplicado faltante + acuerdo mal
-                            -- (consolidar en un solo jsonb con clasificación por tipo de problema)
-  $vencidos_jsonb,
-  $sin_caso_jsonb,
-  $agendados_ult_semana_jsonb,
-  $errores_jsonb,
-  $reporte_texto
-)
-RETURNING id, ejecutado_at, whatsapp_jobid;
-```
-
-Para el campo `criticos` consolidar todos los tipos de problemas:
+⚠️ **IMPORTANTE**: NO hacer el INSERT vía MCP `execute_sql` — el payload de 20KB+
+entra al contexto del modelo y puede causar timeout idle > 10 min entre generar
+SQL y llamar el tool. En su lugar, hacer **POST directo al REST API de Supabase
+desde Python**, así el payload nunca toca el contexto del modelo.
 
 ```python
+import json, os, urllib.request
+
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://wdgdbbcwcrirpnfdmykh.supabase.co')
+SUPABASE_KEY = os.environ['SUPABASE_KEY']  # service_role, configurado en el entorno
+
+d = json.load(open('/tmp/analisis.json'))
+agendados_reales   = json.load(open('/tmp/agendados_reales.json'))   if os.path.exists('/tmp/agendados_reales.json')   else []
+colores_corregidos = json.load(open('/tmp/colores_corregidos.json')) if os.path.exists('/tmp/colores_corregidos.json') else []
+duplicados_creados = json.load(open('/tmp/duplicados_creados.json')) if os.path.exists('/tmp/duplicados_creados.json') else []
+reporte = open('/tmp/reporte.txt').read()
+clausuras = json.load(open('/tmp/clausuras.json'))
+
 criticos_consolidado = {
     'fecha': d['criticos'],
     'color_mal': d['color_mal'],
@@ -682,9 +677,52 @@ criticos_consolidado = {
     'colores_corregidos': colores_corregidos,
     'duplicados_creados': duplicados_creados,
 }
+
+payload = {
+    'total_clausuras': len(clausuras),
+    'agendados_hoy': agendados_reales,
+    'criticos': criticos_consolidado,
+    'vencidos_sin_evento': d['vencidos'],
+    'sin_caso_srt': d['sin_caso'],
+    'agendados_ult_semana': d['agendados_ult_semana'],
+    'errores': [],
+    'reporte_texto': reporte,
+}
+
+req = urllib.request.Request(
+    f'{SUPABASE_URL}/rest/v1/control_clausuras_runs',
+    data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+    headers={
+        'apikey': SUPABASE_KEY,
+        'Authorization': f'Bearer {SUPABASE_KEY}',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+    },
+    method='POST',
+)
+with urllib.request.urlopen(req, timeout=60) as resp:
+    body = resp.read().decode()
+    row = json.loads(body)[0]
+    print(f"RUN ID: {row['id']} | ejecutado_at: {row['ejecutado_at']} | wa_jobid: {row.get('whatsapp_jobid')}")
 ```
 
-Usar jsonb con los arrays del `/tmp/analisis.json`. `reporte_texto` es el contenido completo del mensaje. Por default el trigger manda al grupo "Control Dispos SRT" (`wa_chat_id` tiene default `120363182236641964@g.us`). `errores` captura cualquier problema de agendamiento de Paso 4/4b/4c.
+Correr con `SUPABASE_KEY=... python3 /tmp/insert.py`. El script imprime el ID
+del run + el jobid de WhatsApp. Eso es lo único que ve el agente en el contexto.
+
+El trigger de Supabase (`trg_control_clausuras_wa`) detecta el INSERT, lee
+`reporte_texto` y lo manda por WhatsApp via pg_net + edge function `wa-send`
+al grupo "Control Dispos SRT" (`wa_chat_id` default `120363182236641964@g.us`).
+
+### Paso 7.5 — Fallback si pg_net falla
+
+Si el `whatsapp_jobid` es NULL (el trigger DB no disparó o la edge function falló),
+el agente debe mandar el reporte **directamente** via MCP WhatsApp:
+
+```
+wa_send_text(chat_id="120363182236641964@g.us", text=<contenido de /tmp/reporte.txt>)
+```
+
+Esto garantiza que el reporte llegue aunque la cadena pg_net → edge function se caiga.
 
 Después del INSERT, el campo `whatsapp_jobid` queda como `pg_net:<N>`. Para confirmar que el envío salió OK:
 
