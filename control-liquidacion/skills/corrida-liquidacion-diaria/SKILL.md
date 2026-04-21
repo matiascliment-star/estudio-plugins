@@ -182,6 +182,16 @@ WHERE LEFT(e.estado, 2) IN ('70','71','72','73','74','75','76')
     COALESCE(e.monto_pendiente_actor, 0) +
     COALESCE(e.monto_pendiente_honorarios, 0)
   ) > 0
+  -- Regla "presentado 7 días corridos": si se clickeó presentado en los últimos 7 días,
+  -- el expediente queda excluido de la corrida de monto. Al día 8 vuelve si sigue siendo
+  -- top por monto. A diferencia de urgencia/caducidad, monto no se computa con fecha_ref
+  -- entonces acá hace falta el filtro explícito (sin esto, el click no desactivaría al
+  -- expediente porque el monto pendiente no cambia hasta que se refresque el resumen_ia).
+  AND NOT EXISTS (
+    SELECT 1 FROM impulsos_caducidad ic
+    WHERE ic.expediente_id = e.id
+      AND ic.fecha_click >= CURRENT_DATE - INTERVAL '7 days'
+  )
 ORDER BY monto_total_pendiente DESC
 LIMIT 20;
 ```
