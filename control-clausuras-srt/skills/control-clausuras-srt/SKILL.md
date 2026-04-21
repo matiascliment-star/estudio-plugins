@@ -655,11 +655,16 @@ entra al contexto del modelo y puede causar timeout idle > 10 min entre generar
 SQL y llamar el tool. En su lugar, hacer **POST directo al REST API de Supabase
 desde Python**, así el payload nunca toca el contexto del modelo.
 
-```python
-import json, os, urllib.request
+Escribir `/tmp/insert.py` con este contenido EXACTO:
 
-SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://wdgdbbcwcrirpnfdmykh.supabase.co')
-SUPABASE_KEY = os.environ['SUPABASE_KEY']  # service_role, configurado en el entorno
+```python
+import json, os, urllib.request, urllib.error
+
+# Publishable anon key de Supabase (no secreta, hardcoded porque el entorno
+# remoto del trigger no tiene env vars propias). El INSERT a
+# control_clausuras_runs está permitido para anon via RLS.
+SUPABASE_URL = 'https://wdgdbbcwcrirpnfdmykh.supabase.co'
+SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkZ2RiYmN3Y3JpcnBuZmRteWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4MDMyMTgsImV4cCI6MjA4MDM3OTIxOH0.Rb4MVTyGIjcr5AbSdqEb0rZdGTJF5X_jNzJDol-KY3g'
 
 d = json.load(open('/tmp/analisis.json'))
 agendados_reales   = json.load(open('/tmp/agendados_reales.json'))   if os.path.exists('/tmp/agendados_reales.json')   else []
@@ -669,8 +674,7 @@ reporte = open('/tmp/reporte.txt').read()
 clausuras = json.load(open('/tmp/clausuras.json'))
 
 criticos_consolidado = {
-    'fecha': d['criticos'],
-    'color_mal': d['color_mal'],
+    'fecha': d['criticos'], 'color_mal': d['color_mal'],
     'jurisdiccion_mal': d['jurisdiccion_mal'],
     'duplicado_faltante': d['duplicado_faltante'],
     'acuerdo_mal_agendado': d['acuerdo_mal_agendado'],
@@ -700,29 +704,39 @@ req = urllib.request.Request(
     },
     method='POST',
 )
-with urllib.request.urlopen(req, timeout=60) as resp:
-    body = resp.read().decode()
-    row = json.loads(body)[0]
-    print(f"RUN ID: {row['id']} | ejecutado_at: {row['ejecutado_at']} | wa_jobid: {row.get('whatsapp_jobid')}")
+try:
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        row = json.loads(resp.read().decode())[0]
+        print(f"OK RUN_ID={row['id']} wa_jobid={row.get('whatsapp_jobid')}")
+except urllib.error.HTTPError as e:
+    print(f"HTTP_ERR {e.code}: {e.read().decode()[:500]}")
+except Exception as e:
+    print(f"ERR: {e}")
 ```
 
-Correr con `SUPABASE_KEY=... python3 /tmp/insert.py`. El script imprime el ID
-del run + el jobid de WhatsApp. Eso es lo único que ve el agente en el contexto.
+Ejecutar: `python3 /tmp/insert.py`
+
+El stdout imprime una sola línea tipo `OK RUN_ID=6 wa_jobid=pg_net:42` o `HTTP_ERR 403: ...`.
+Solo eso entra al contexto del modelo — el payload de 20KB nunca se muestra.
 
 El trigger de Supabase (`trg_control_clausuras_wa`) detecta el INSERT, lee
 `reporte_texto` y lo manda por WhatsApp via pg_net + edge function `wa-send`
 al grupo "Control Dispos SRT" (`wa_chat_id` default `120363182236641964@g.us`).
 
-### Paso 7.5 — Fallback si pg_net falla
+### Paso 7.5 — Fallbacks si falla el INSERT o el WA
 
-Si el `whatsapp_jobid` es NULL (el trigger DB no disparó o la edge function falló),
-el agente debe mandar el reporte **directamente** via MCP WhatsApp:
+**Si el script Python devuelve `HTTP_ERR` o `ERR`** (RLS lo bloquea, timeout,
+etc.), NO intentar `execute_sql` del MCP Supabase con el payload completo
+(ya sabemos que timeoutea por el idle de 10 min). En cambio:
 
-```
-wa_send_text(chat_id="120363182236641964@g.us", text=<contenido de /tmp/reporte.txt>)
-```
+1. Mandar el reporte directamente al grupo via MCP WhatsApp:
+   ```
+   wa_send_text(chat_id="120363182236641964@g.us", text=<contenido de /tmp/reporte.txt>)
+   ```
+2. Reportar en el output del trigger que el INSERT falló pero el WA salió.
 
-Esto garantiza que el reporte llegue aunque la cadena pg_net → edge function se caiga.
+**Si el INSERT fue OK pero `wa_jobid` es NULL** (pg_net fallo, edge function caída):
+mandar el reporte también via MCP WhatsApp como fallback.
 
 Después del INSERT, el campo `whatsapp_jobid` queda como `pg_net:<N>`. Para confirmar que el envío salió OK:
 
