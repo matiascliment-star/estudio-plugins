@@ -28,7 +28,9 @@ Chequeo diario (L-V 9am AR) de comunicaciones nuevas de Mi Ventanilla con plazo 
 | Constancia Orden Estudio (al cliente) | Fecha estudio directa | Principal | **Sí** (cálido) |
 | Citación Examen Físico | Fecha audiencia directa | Principal | **Sí** (cálido) |
 | Citación Homologación (Teams) | Fecha audiencia directa | Principal | **Sí** (con link) |
-| **Acto Administrativo (Clausura)** | **15d CABA / 15+90d Pcia** | **Principal + ✱ Vencimientos** (duplicado) | No (el cliente no se entera) |
+| **Clausura con acuerdo** (homologación) | **5d contestar intimación** | **Principal + ✱ Vencimientos** | No |
+| **Clausura rechazo / divergencia CABA** | **15d apelar** | **Principal + ✱ Vencimientos** | No |
+| **Clausura rechazo / divergencia Pcia** | **15d + 90d apelar** | **Principal + ✱ Vencimientos** | No |
 
 Nota: las clausuras también las verifica el skill `control-clausuras-srt` los lunes. Acá se **crean diariamente** apenas llegan, el otro skill **controla** que estén bien agendadas. Dos IAs, un fiscaliza lo de la otra.
 
@@ -174,6 +176,7 @@ def proc_dictamen_itm(c, tipo_label):
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- VENCE IMPUGNAR {tipo_label}",
         'aviso_cliente': None,
+        'colorId_override': '6',  # naranja: dictamen para impugnar
     }
 
 def proc_constancia_orden_estudio(c):
@@ -228,6 +231,7 @@ def proc_constancia_orden_estudio(c):
             'estudios': estudios,
             'subtipo': 'orden_estudio_cliente',
             'con_hora': True,
+            'colorId_override': '9',  # azul: estudio al cliente (orden prestador)
         }
 
     # Caso 1: intimación al abogado (default si no hay Fecha/Hora Prestación)
@@ -237,6 +241,7 @@ def proc_constancia_orden_estudio(c):
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- VENCE CONTESTAR INTIMACION SRT",
         'aviso_cliente': None,
         'subtipo': 'intimacion_abogado',
+        'colorId_override': '6',  # naranja: intimación (plazo procesal)
     }
 
 def proc_citacion_examen(c):
@@ -268,6 +273,7 @@ def proc_citacion_examen(c):
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- {tipo_estudio.upper()} SRT {hora_str}",
         'aviso_cliente': aviso, 'hora': hora_str, 'direccion': direccion,
         'con_hora': True,  # evento con hora específica (no all-day)
+        'colorId_override': '9',  # azul: citación médica / estudio (orden prestador)
     }
 
 def proc_citacion_homologacion(c):
@@ -296,6 +302,7 @@ def proc_citacion_homologacion(c):
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- AUDIENCIA HOMOLOGACION SRT {hora_str} (Teams)",
         'aviso_cliente': aviso, 'hora': hora_str, 'link': link,
         'con_hora': True,
+        'colorId_override': '9',  # azul: audiencia de acuerdo virtual (Tami/Mara)
     }
 
 def detectar_cm_emisora(texto):
@@ -332,66 +339,101 @@ def cm_es_caba(codigo):
     if not codigo: return None
     return bool(re.fullmatch(r'10[A-Z]*', codigo.strip().upper()))
 
+def es_clausura_con_acuerdo(texto):
+    """Detecta si la Disposición de Clausura es por homologación de acuerdo.
+    Frases clave (CONSIDERANDO + articulado):
+      - "resolvieron celebrar el acuerdo acompañado"
+      - "Homológase el acuerdo celebrado"
+    En ese caso NO se apela → el trabajador tiene 5 hábiles para contestar
+    una intimación (aclarar si acepta/rechaza el acuerdo).
+    """
+    if not texto: return False
+    t = texto.lower()
+    return ('resolvieron celebrar el acuerdo acompañado' in t
+            or 'resolvieron celebrar el acuerdo acompanado' in t
+            or 'homológase el acuerdo celebrado' in t
+            or 'homologase el acuerdo celebrado' in t)
+
 def proc_clausura(c):
-    """Notificación de Acto Administrativo con Clausura en detalle.
-    15 días hábiles CABA (CM 10/10L), 15+90 días hábiles Pcia BsAs.
-    Cada plazo se duplica en DOS calendarios: principal (flirteador84) + ✱ Vencimientos.
-    Detecta CABA/Pcia leyendo del PDF qué CM firma (la ciudad de emisión no vale).
-    Si no se puede detectar → retorna None (el skill lo reporta para revisión manual).
+    """Notificación de Acto Administrativo con 'Clausura' en detalle.
+
+    Dos variantes según el texto del PDF:
+
+    1) CLAUSURA CON ACUERDO (homologación): el trabajador y la ART firmaron un
+       acuerdo. Plazo: 5 días hábiles para contestar intimación. Color amarillo.
+       Eventos all-day en calendar principal + ✱ Vencimientos.
+
+    2) CLAUSURA DE RECHAZO/DIVERGENCIA: no hubo acuerdo, o no tiene incapacidad.
+       Plazos: 15 días hábiles CABA (CM 10/10L), 15+90 días hábiles Pcia.
+       Color por jurisdicción: rojo CABA, verde Pcia. Eventos all-day en
+       calendar principal + ✱ Vencimientos.
+
+    Detecta CABA/Pcia leyendo del PDF qué CM firma (la ciudad de emisión NO vale:
+    una clausura emitida desde SAN ISIDRO puede estar firmada por la CM 10 de CABA).
+    Fallback chain: texto de clausura → texto dictamen previo → casos_srt.comision_medica.
+    Si no se puede clasificar → retorna None (reporta para revisión manual).
+
     NO manda aviso al cliente (es un plazo interno del estudio).
     """
     CAL_VENC = 'f98t26v6l01v4ss922e069rid0@group.calendar.google.com'  # ✱ Vencimientos
     CAL_PRINC = 'flirteador84@gmail.com'                               # principal
     notif = date.fromisoformat(c['fecha_notif'])
+    texto = c.get('texto_extraido') or ''
+    nombre = c['nombre_actor'] or '(SIN NOMBRE)'
+    srt = c['srt']
 
-    # Detectar CM emisora: 1) texto del propio PDF de clausura, 2) fallback al
-    # texto del dictamen previo del mismo SRT, 3) fallback al campo cm de casos_srt.
-    codigo = (detectar_cm_emisora(c.get('texto_extraido'))
+    def _dup(lista, fecha, summary, colorId):
+        """Agrega 2 eventos (✱ Vencimientos + principal) con el mismo contenido."""
+        for cal in (CAL_VENC, CAL_PRINC):
+            lista.append({'fecha_evento': fecha, 'summary': summary,
+                          'calendar_override': cal, 'colorId_override': colorId})
+
+    # ─── VARIANTE 1: clausura con ACUERDO ───
+    if es_clausura_con_acuerdo(texto):
+        fecha_ev = sumar_dh(notif, 5)
+        eventos = []
+        _dup(eventos, fecha_ev,
+             f"{nombre} - {srt} - VENCE CONTESTAR INTIMACION CLAUSURA (ACUERDO)",
+             '5')  # amarillo
+        return {
+            'fecha_evento': eventos[0]['fecha_evento'],
+            'summary': eventos[0]['summary'],
+            'aviso_cliente': None, 'eventos_extra': eventos,
+            'subtipo': 'clausura_acuerdo',
+            'calendar_override': eventos[0]['calendar_override'],
+            'colorId_override': '5',
+        }
+
+    # ─── VARIANTE 2: clausura de RECHAZO/DIVERGENCIA ───
+    codigo = (detectar_cm_emisora(texto)
               or detectar_cm_emisora(c.get('texto_dictamen_previo')))
     if codigo:
         is_caba = cm_es_caba(codigo)
         ciudad = f'CM {codigo}' + (' (CABA)' if is_caba else '')
     else:
-        # fallback al campo manual de casos_srt
         cm_manual = (c.get('cm') or '').upper()
         if cm_manual in ('CABA', 'CM 10L', 'CM 10'):
-            is_caba = True
-            ciudad = 'CABA'
+            is_caba = True; ciudad = 'CABA'
         elif cm_manual:
-            is_caba = False
-            ciudad = cm_manual
+            is_caba = False; ciudad = cm_manual
         else:
-            # No podemos clasificar → retornar None para que el skill lo reporte
-            return None
-    nombre = c['nombre_actor'] or '(SIN NOMBRE)'
-    srt = c['srt']
+            return None  # reporta para revisión manual
 
-    # Para cada plazo generamos 2 eventos (uno por calendar). Paso 3 los crea todos.
+    color = '11' if is_caba else '10'  # rojo CABA, verde Pcia — toda la clausura misma jurisdicción
     eventos = []
-    def _dup(fecha, summary, colorId):
-        eventos.append({
-            'fecha_evento': fecha, 'summary': summary,
-            'calendar_override': CAL_VENC, 'colorId_override': colorId,
-        })
-        eventos.append({
-            'fecha_evento': fecha, 'summary': summary,
-            'calendar_override': CAL_PRINC, 'colorId_override': colorId,
-        })
-
     f15 = sumar_dh(notif, 15)
-    _dup(f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {ciudad}", '11')
+    _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {ciudad}", color)
     if not is_caba:
         f90 = sumar_dh(notif, 90)
-        _dup(f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DÍAS) {ciudad}", '10')
+        _dup(eventos, f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DÍAS) {ciudad}", color)
 
     return {
         'fecha_evento': eventos[0]['fecha_evento'],
         'summary': eventos[0]['summary'],
-        'aviso_cliente': None,
-        'eventos_extra': eventos,
+        'aviso_cliente': None, 'eventos_extra': eventos,
         'subtipo': 'clausura_caba' if is_caba else 'clausura_pcia',
         'calendar_override': eventos[0]['calendar_override'],
-        'colorId_override': eventos[0]['colorId_override'],
+        'colorId_override': color,
     }
 
 # Sentinel: los dispatchers lo devuelven cuando la comunicación no aplica a su sub-tipo.
@@ -463,27 +505,43 @@ Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia
 
 **Items con `skip_calendar: True`** (ej: prestación dineraria informativa) → NO se crea evento en Calendar, pero en Paso 4 igual se marca `agendado_en_calendar_at = now()` para no reprocesarla (con `calendar_event_id = NULL` y `calendar_event_fecha = NULL`).
 
-**Dos modalidades según tipo**:
+**Dos modalidades según tipo** (el procesador marca con `item.con_hora = True` → A, ausente → B):
 
-**A) Evento con hora específica** (Citación Examen, Citación Homologación, Orden Estudio al cliente — tienen una hora de cita real):
-- **allDay**: false
-- **startTime**: `{fecha_evento}T{HH:MM}:00` (hora exacta del PDF)
-- **endTime**: `{fecha_evento}T{HH+1:MM}:00` (1 hora estimada)
-- **colorId**: `'6'` (Tangerine naranja)
+**A) Evento con hora específica** (audiencias / estudios / citaciones — `item.con_hora == True`):
+Llamar `create_event` con:
+- `startTime`: `"{fecha_evento}T{HH:MM}:00"`  (hora exacta del PDF)
+- `endTime`:   `"{fecha_evento}T{HH+1:MM}:00"` (1 hora estimada)
+- NO pasar `allDay` (default false)
+- `timeZone`: `"America/Argentina/Buenos_Aires"`
 
-**B) Evento all-day** (Dictamen, Intimación Constancia, Clausura — son plazos, no hora específica):
-- **allDay**: true
-- **startTime**: `{fecha_evento}T00:00:00`
-- **endTime**: `{fecha_evento + 1 día}T00:00:00` (all-day Google Calendar es end-exclusive → evento de 1 solo día)
-- **colorId**: `item.colorId_override` si existe (clausura 15d=`'11'`, 90d=`'10'`), sino `'6'`
+**B) Evento all-day** (plazos procesales — `item.con_hora` ausente/False):
 
-**Común a ambos**:
-- **calendarId**: `item.calendar_override` si existe (clausuras → `✱ Vencimientos`), sino `flirteador84@gmail.com`
-- **summary**: `item.summary`
-- **description**: `Fecha de notif: DD/MM/YYYY — auto-agendado por agendar-comunicaciones-srt`. Para citación agregar hora/dirección/link.
-- **timeZone**: `America/Argentina/Buenos_Aires`
+⚠️ CRÍTICO — en `create_event` de este MCP, para que el evento dure UN SOLO DÍA:
 
-Los procesadores marcan qué modalidad con `item.con_hora = True` (modalidad A) o ausente/False (modalidad B).
+- `startTime`: `"{fecha_evento}"` (SOLO la fecha, sin T ni horas — ej: `"2026-04-27"`)
+- `endTime`:   `"{fecha_evento}"` (MISMA fecha — ej: `"2026-04-27"`)
+- `allDay`: `true`
+
+Ejemplo concreto: vencimiento lunes 27/4 → `startTime="2026-04-27"`, `endTime="2026-04-27"`, `allDay=true` → Calendar muestra un único evento el lunes 27.
+
+NO pasar `T00:00:00` ni formato datetime. NO sumar un día al endTime. Si Calendar muestra "Día 1/2" y "Día 2/2", el evento quedó mal creado → borrarlo y rehacer.
+
+**colorId según tipo** (mapeo del estudio):
+| Tipo | colorId | Color |
+|------|---------|-------|
+| Dictamen Médico (all-day, impugnar 3d) | `'6'` | Naranja (Tangerine) |
+| Intimación Constancia (all-day, 5d contestar) | `'6'` | Naranja |
+| **Clausura con acuerdo** (all-day, 5d contestar intimación) | `'5'` | **Amarillo** (Banana) |
+| Clausura rechazo CABA (all-day) | `'11'` | **Rojo** (Tomato) |
+| Clausura rechazo Pcia (all-day, 15d y 90d) | `'10'` | **Verde** (Basil) |
+| Citación Examen / Homologación / Orden Estudio al cliente (con hora) | `'9'` | **Azul** (Blueberry) |
+
+Si `item.colorId_override` existe, usar ese. Sino `'6'` naranja default.
+
+**Común a ambas modalidades**:
+- `calendarId`: `item.calendar_override` si existe (clausuras duplican en `✱ Vencimientos` + principal), sino `"flirteador84@gmail.com"`
+- `summary`: `item.summary`
+- `description`: `"Fecha de notif: DD/MM/YYYY — auto-agendado por agendar-comunicaciones-srt"`. Para citación agregar hora/dirección/link.
 
 Loop para clausuras Pcia (2 eventos por comunicación):
 ```python
