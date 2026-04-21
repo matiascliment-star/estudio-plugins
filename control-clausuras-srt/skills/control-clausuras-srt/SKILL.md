@@ -47,9 +47,10 @@ Los feriados están en la tabla **`feriados_ar`** de Supabase (project `wdgdbbcw
 
 ## WORKFLOW
 
-### Paso 1 — Clausuras últimos 180 días (+ texto del PDF)
+### Paso 1 — Clausuras últimos 180 días (+ texto del PDF truncado)
 
-Supabase:
+Supabase. Texto limitado a 6000 chars: suficiente para detectar CM emisora y
+frase de acuerdo (ambos aparecen en los primeros considerandos).
 
 ```sql
 SELECT
@@ -57,9 +58,9 @@ SELECT
   (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_dispo,
   c.nombre,
   c.comision_medica AS cm,
-  a.texto_extraido AS texto_clausura,
+  LEFT(a.texto_extraido, 6000) AS texto_clausura,
   -- fallback si el PDF de la clausura aún no tiene texto extraído
-  (SELECT a2.texto_extraido
+  (SELECT LEFT(a2.texto_extraido, 6000)
    FROM adjuntos_miventanilla a2
    JOIN comunicaciones_miventanilla m2 ON m2.id = a2.comunicacion_id
    WHERE m2.srt_expediente_nro = m.srt_expediente_nro
