@@ -516,20 +516,29 @@ Llamar `create_event` con:
 
 **B) Evento all-day** (plazos procesales — `item.con_hora` ausente/False):
 
-⚠️ CRÍTICO — el MCP `create_event` exige ISO 8601 en `startTime`/`endTime`. Para un evento all-day de UN SOLO DÍA:
+⚠️ CRÍTICO — fórmula **verificada en producción** contra `create_event` del MCP:
 
-- `startTime`: `"{fecha_evento}T00:00:00Z"` (ISO 8601 con Z al final)
-- `endTime`:   `"{fecha_evento + 1 día}T00:00:00Z"` (Google Calendar interpreta end como end-exclusive → con start=X y end=X+1 el evento dura SOLO el día X)
-- NO pasar `allDay` (no es un parámetro del MCP; Calendar detecta all-day automáticamente porque las horas son 00:00:00Z)
+```
+create_event(
+    summary="...",
+    startTime="{fecha_evento}T00:00:00Z",         # medianoche UTC
+    endTime="{fecha_evento + 1 día}T00:00:00Z",   # start + 1 día (end-exclusive)
+    allDay=True,                                   # SÍ se pasa, es parámetro del create_event
+    timeZone="America/Argentina/Buenos_Aires",
+    colorId=...,
+)
+```
 
-Ejemplo concreto: vencimiento lunes 27/4 → `startTime="2026-04-27T00:00:00Z"`, `endTime="2026-04-28T00:00:00Z"` → Calendar muestra un único evento el lunes 27.
+Ejemplo concreto — vencimiento lunes 27/4:
+`startTime="2026-04-27T00:00:00Z"`, `endTime="2026-04-28T00:00:00Z"`, `allDay=True`
+→ Calendar muestra un único evento el **lunes 27**, no "Día 1/2" y "Día 2/2".
 
-⚠️ **Errores comunes a evitar**:
-- `endTime="2026-04-29T00:00:00Z"` (sumarle 2 días al start) → Calendar muestra "Día 1/2" el lunes y "Día 2/2" el martes. MAL.
+⚠️ **Errores comunes a evitar** (cada uno verificado que falla):
+- `endTime="2026-04-29T00:00:00Z"` (start + 2 días) → Calendar muestra "Día 1/2" y "Día 2/2". MAL.
 - `startTime="2026-04-27"` sin `T00:00:00Z` → MCP rechaza con "must be ISO 8601 timestamp".
-- `endTime="2026-04-27T00:00:00Z"` (igual al start) → MCP lo considera inválido y el evento dura 0 días o no se crea.
+- `endTime="2026-04-27T00:00:00Z"` (igual al start) → evento inválido / 0 días.
 
-La regla es SIEMPRE: **`end = start + 1 día`** para all-day de un solo día.
+Regla invariable: **`end.date = start.date + 1 día`**.
 
 **colorId según tipo** (mapeo del estudio):
 | Tipo | colorId | Color |
