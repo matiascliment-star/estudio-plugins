@@ -7,7 +7,7 @@ description: >
   pendiente y reglas de ejecución), genera borradores DOCX para escritos de fórmula,
   los sube a OneDrive (CABA) y MEV (Pcia), y manda mensajes de WhatsApp por chica +
   un resumen ejecutivo a Matías con los CRÍTICOS del día. Destinada a correr todos
-  los días hábiles a las 7:30 AR (después de la corrida de caducidad).
+  los días hábiles a las 18:00–18:30 AR (dos variantes: por urgencia y por monto).
   Triggers: "corrida liquidación", "control liquidación diario", "liquidación del día",
   "correr liquidación", "briefing liquidación", "revisar ejecuciones", "liquidación hoy",
   "corrida ejecución", "ejecución del día".
@@ -18,7 +18,8 @@ description: >
 ## Objetivo
 
 Espejar la corrida de caducidad pero para los expedientes en **etapa de ejecución
-de sentencia** (estados 70 a 76). Cada día hábil a las 7:30 AR el skill:
+de sentencia** (estados 70 a 76). Cada día hábil a las 18:00 AR (variante urgencia)
+y 18:30 AR (variante monto) el skill:
 
 1. Arma la lista del día: 3 más urgentes por cada sub-estado en CABA (= 21) + top
    5–7 de Provincia.
@@ -63,11 +64,30 @@ Excluidos: `77` (Conciliado), `80–84` (Finalizados), `90+` (Especiales).
   ejecutado** y, sobre todo, oportunidad económica que se erosiona con la
   inflación.
 
+## Variantes
+
+Esta skill tiene **dos variantes** que corren en scheduled-tasks distintos el mismo día:
+
+| Variante | Horario AR | Cron UTC | Criterio de selección | `tipo_corrida` |
+|---|---|---|---|---|
+| **Urgencia** (default) | 18:00 | `0 21 * * 1-5` | 3 por sub-estado × días sin empuje DESC → 21 CABA + top Pcia | `urgencia` |
+| **Monto** | 18:30 | `30 21 * * 1-5` | Top 15–20 por `monto_pendiente_actor + monto_pendiente_honorarios` DESC (sin partition por sub-estado) | `monto` |
+
+La variante **Urgencia** captura casos olvidados / parados hace mucho.
+La variante **Monto** captura casos con mucha plata sobre la mesa aunque tengan movimiento reciente.
+Un expediente puede aparecer en las dos si es urgente Y grande.
+
+El invocador (scheduled-task) indica qué variante ejecutar. Ambas comparten
+Fases 2 a 8 — solo cambia la **Fase 1** (query de selección) y el flag
+`tipo_corrida` al insertar.
+
 ## Flujo completo
 
 ### Fase 1: Selección de candidatos
 
 Supabase project `wdgdbbcwcrirpnfdmykh`.
+
+### Fase 1A — Variante URGENCIA
 
 **CABA — 3 por sub-estado, ordenados por días sin empuje DESC:**
 
@@ -140,6 +160,41 @@ sub-estado no hay candidatos, se omite (no se rellena con otro sub-estado).
 
 **Dedup**: si un expediente cae en dos sub-estados (no debería), priorizar el
 sub-estado más avanzado.
+
+### Fase 1B — Variante MONTO
+
+**Top 15–20 por monto total pendiente DESC (sin partition por sub-estado):**
+
+```sql
+SELECT
+  e.id, e.numero, e.caratula, e.jurisdiccion, e.estado,
+  LEFT(e.estado, 2) AS sub_estado,
+  e.mev_idc, e.mev_ido, e.link_causa, e.resumen_ia,
+  e.onedrive_id, e.onedrive_url,
+  e.monto_pendiente_actor, e.monto_pendiente_honorarios,
+  e.monto_capital_sentencia, e.moneda,
+  COALESCE(e.monto_pendiente_actor, 0) + COALESCE(e.monto_pendiente_honorarios, 0) AS monto_total_pendiente
+FROM expedientes e
+WHERE LEFT(e.estado, 2) IN ('70','71','72','73','74','75','76')
+  AND e.acumulado_con IS NULL
+  AND e.jurisdiccion IN ('CABA','Provincia')
+  AND (
+    COALESCE(e.monto_pendiente_actor, 0) +
+    COALESCE(e.monto_pendiente_honorarios, 0)
+  ) > 0
+ORDER BY monto_total_pendiente DESC
+LIMIT 20;
+```
+
+**Por qué sin partition**: el objetivo de la corrida por monto es identificar
+*dónde está la plata grande*, no cubrir todos los sub-estados. Si los 20
+expedientes más grandes son todos del 71, que así sea — los sub-estados chicos
+(72, 76) ya los ve la corrida por urgencia.
+
+**Requisito previo**: los expedientes deben tener `monto_pendiente_actor`
+y/o `monto_pendiente_honorarios` cargados. Esto lo hace el skill
+`resumir-expediente` al procesar cada caso. Si un expediente importante tiene
+monto NULL, primero corré ese skill para cargarlo.
 
 ### Fase 2: Asignación de responsables
 
@@ -341,20 +396,25 @@ en la migración).
 
 ## Schedule
 
-Trigger diario **7:30 AR** (= 10:30 UTC) de **lunes a viernes**, después de la
-corrida de caducidad. Crear con skill `schedule`.
+Dos scheduled-tasks, **lunes a viernes 18:00–18:30 AR** (= 21:00–21:30 UTC):
+
+- `scheduled-tasks/corrida-liquidacion-diaria.md` — variante **urgencia**, cron `0 21 * * 1-5`
+- `scheduled-tasks/corrida-liquidacion-monto.md` — variante **monto**, cron `30 21 * * 1-5`
+
+Ambas leen este mismo SKILL.md y ejecutan la variante correspondiente según el nombre del scheduled-task.
 
 ## Resumen para el agente orquestador (Opus 4.7)
 
 1. Cargar `reglas-ejecucion.md` a memoria.
-2. Ejecutar query de Fase 1 → ~21 CABA + ~14 Pcia (variable).
-3. Asignar responsables según tabla de Fase 2.
-4. Lanzar N subagentes en tandas de 8 paralelos.
-5. Consolidar JSON. Identificar CRÍTICOS.
-6. Generar mensajes WA + resumen Matías.
-7. Enviar con `mcp__whatsapp__wa_send_text` + `wa_send_document`.
-8. Insertar filas en `liquidacion_corridas`.
-9. Reportar al usuario / al scheduled trigger.
+2. Determinar **variante** (urgencia | monto) según el scheduled-task invocante.
+3. Ejecutar query de Fase 1A (urgencia) o 1B (monto).
+4. Asignar responsables según tabla de Fase 2 (mismo criterio en ambas variantes).
+5. Lanzar N subagentes en tandas de 8 paralelos.
+6. Consolidar JSON. Identificar CRÍTICOS.
+7. Generar mensajes WA + resumen Matías.
+8. Enviar con `mcp__whatsapp__wa_send_text` + `wa_send_document`.
+9. Insertar filas en `liquidacion_corridas` con `tipo_corrida='urgencia'` o `'monto'` según la variante.
+10. Reportar al usuario / al scheduled trigger.
 
 ## Tiempo esperado
 
