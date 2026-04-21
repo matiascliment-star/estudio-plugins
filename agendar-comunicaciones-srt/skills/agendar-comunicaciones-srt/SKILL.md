@@ -69,9 +69,19 @@ SELECT m.id AS comunicacion_id,
   m.tipo_comunicacion,
   m.detalle,                         -- necesario para detectar Clausura
   c.nombre AS nombre_actor,
-  c.comision_medica AS cm,          -- necesario para clausuras CABA vs Pcia
+  c.comision_medica AS cm,          -- fallback final de CM si no se detecta del PDF
   c.wa_chat_id AS grupo_cliente_wa,  -- chat_id del grupo WhatsApp con el cliente
-  a.texto_extraido
+  a.texto_extraido,
+  -- Para clausuras: fallback al PDF del dictamen más reciente del mismo SRT
+  -- (por si la clausura aún no tiene texto_extraido del scraper v2.5).
+  (SELECT a2.texto_extraido
+   FROM adjuntos_miventanilla a2
+   JOIN comunicaciones_miventanilla m2 ON m2.id = a2.comunicacion_id
+   WHERE m2.srt_expediente_nro = m.srt_expediente_nro
+     AND m2.tipo_comunicacion = 'Notificación de Dictamen Médico'
+     AND a2.texto_extraido IS NOT NULL
+   ORDER BY m2.fecha_notificacion DESC
+   LIMIT 1) AS texto_dictamen_previo
 FROM comunicaciones_miventanilla m
 LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
 LEFT JOIN adjuntos_miventanilla a ON a.comunicacion_id = m.id
@@ -83,7 +93,9 @@ WHERE m.tipo_comunicacion IN (
     'Notificación de Acto Administrativo',  -- clausuras (filtradas por detalle en el procesador)
     'Envío de Comunicación'                 -- prestación dineraria (filtrada por detalle en el procesador)
   )
-  AND COALESCE(m.estado, '') <> 'Leído'      -- SIN procesar por las chicas en la app (Leído es la única marca humana válida; "No leído" es ruido del scraper)
+  -- NO filtrar por m.estado: el scraper contamina el campo (marca Leído al abrir
+  -- DetalleComunicacion.aspx para extraer adjuntos), y el equipo no usa la app
+  -- del estudio para marcarlas. Idempotencia real solo por agendado_en_calendar_at.
   AND m.agendado_en_calendar_at IS NULL      -- SIN procesar por Claude en corridas anteriores
   -- Ventana: hoy + ayer + anteayer (días calendario completos AR).
   -- Ejemplo: si corre el 18/04 a las 9am AR, procesa TODAS las notificaciones
@@ -286,19 +298,71 @@ def proc_citacion_homologacion(c):
         'con_hora': True,
     }
 
+def detectar_cm_emisora(texto):
+    """Extrae el código de la Comisión Médica que EMITE la clausura/dictamen.
+    Devuelve el código (ej: '10', '10L', '13', '37', '372') o None si no detecta.
+
+    La CM emisora es la que firma la disposición — NO la ciudad de emisión.
+    Ej: una clausura puede estar emitida desde SAN ISIDRO pero firmada por la
+    CM 10 (CABA). Lo que vale es quién firma.
+
+    Patrones posibles (ordenados por especificidad):
+      1. Número de disposición: "DIAPA-2026-7647-APN-SHC10#SRT" → '10'
+      2. Encabezado art.1°:    "SERVICIO DE HOMOLOGACIÓN DE LA COMISION MEDICA N° 10 DISPONE" → '10'
+      3. Firma al pie:         "Servicio de Homologación C.M. 10" → '10'
+      4. Considerando clausura: "esta Comisión Medica N° 10 de la Ciudad Autónoma" → '10'
+      5. Dictamen médico:      "Comisión Médica: 10L - DELEGACIÓN VILLA URQUIZA" → '10L'
+    """
+    if not texto: return None
+    patrones = [
+        r'DIAPA[^A-Za-z0-9]+\d+[^A-Za-z0-9]+\d+[^A-Za-z0-9]+APN[^A-Za-z0-9]+SHC(\w+?)#',
+        r'SERVICIO\s+DE\s+HOMOLOGACI[OÓ]N\s+DE\s+LA\s+COMISI[OÓ]N\s+M[EÉ]DICA\s+N[°º]?\s*(\w+)',
+        r'Servicio\s+de\s+Homologaci[oó]n\s+C\.?\s*M\.?\s*(\w+)',
+        r'esta\s+Comisi[oó]n\s+M[eé]dica\s+N[°º]?\s*(\w+)',
+        r'Comisi[oó]n\s+M[eé]dica\s*:\s*(\w+)',
+    ]
+    for pat in patrones:
+        m = re.search(pat, texto, re.I)
+        if m:
+            return m.group(1).strip().upper()
+    return None
+
+def cm_es_caba(codigo):
+    """CM 10 (y variantes 10L, 10A, etc.) → CABA. Cualquier otra → Pcia."""
+    if not codigo: return None
+    return bool(re.fullmatch(r'10[A-Z]*', codigo.strip().upper()))
+
 def proc_clausura(c):
     """Notificación de Acto Administrativo con Clausura en detalle.
-    15 días hábiles CABA (CM 10L, CABA), 15+90 días hábiles Pcia BsAs.
+    15 días hábiles CABA (CM 10/10L), 15+90 días hábiles Pcia BsAs.
     Cada plazo se duplica en DOS calendarios: principal (flirteador84) + ✱ Vencimientos.
-    Asi Mara los ve en su agenda normal Y en el calendar dedicado.
+    Detecta CABA/Pcia leyendo del PDF qué CM firma (la ciudad de emisión no vale).
+    Si no se puede detectar → retorna None (el skill lo reporta para revisión manual).
     NO manda aviso al cliente (es un plazo interno del estudio).
     """
     CAL_VENC = 'f98t26v6l01v4ss922e069rid0@group.calendar.google.com'  # ✱ Vencimientos
     CAL_PRINC = 'flirteador84@gmail.com'                               # principal
     notif = date.fromisoformat(c['fecha_notif'])
-    cm = (c.get('cm') or '').upper()
-    is_caba = cm in ('CABA', 'CM 10L')
-    ciudad = 'CABA' if is_caba else (cm or 'PCIA').upper()
+
+    # Detectar CM emisora: 1) texto del propio PDF de clausura, 2) fallback al
+    # texto del dictamen previo del mismo SRT, 3) fallback al campo cm de casos_srt.
+    codigo = (detectar_cm_emisora(c.get('texto_extraido'))
+              or detectar_cm_emisora(c.get('texto_dictamen_previo')))
+    if codigo:
+        is_caba = cm_es_caba(codigo)
+        ciudad = f'CM {codigo}' + (' (CABA)' if is_caba else '')
+    else:
+        # fallback al campo manual de casos_srt
+        cm_manual = (c.get('cm') or '').upper()
+        if cm_manual in ('CABA', 'CM 10L', 'CM 10'):
+            is_caba = True
+            ciudad = 'CABA'
+        elif cm_manual:
+            is_caba = False
+            ciudad = cm_manual
+        else:
+            # No podemos clasificar → retornar None para que el skill lo reporte
+            return None
     nombre = c['nombre_actor'] or '(SIN NOMBRE)'
     srt = c['srt']
 
