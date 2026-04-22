@@ -655,16 +655,63 @@ entra al contexto del modelo y puede causar timeout idle > 10 min entre generar
 SQL y llamar el tool. En su lugar, hacer **POST directo al REST API de Supabase
 desde Python**, así el payload nunca toca el contexto del modelo.
 
-Escribir `/tmp/insert.py` con este contenido EXACTO:
+⚠️ **No se puede usar POST HTTP directo al REST API de Supabase** — el sandbox
+egress del agente remoto bloquea hosts no-allowlist ("Host not in allowlist").
+El INSERT **tiene que ir via MCP `execute_sql`**.
+
+Para evitar el timeout idle de 10 min (que pasaba cuando el payload completo de
+20KB entraba al contexto del modelo), hacer el INSERT en **3 partes chicas**:
+
+1. **INSERT inicial**: solo `total_clausuras` + `reporte_texto` + `errores` (≤ 7KB
+   total). Dispara el trigger `trg_control_clausuras_wa` → pg_net → edge function
+   → WhatsApp al grupo. `RETURNING id, whatsapp_jobid`.
+2. **UPDATE 1**: `agendados_hoy`, `criticos`, `agendados_ult_semana` (los jsonb más chicos).
+3. **UPDATE 2**: `vencidos_sin_evento`, `sin_caso_srt` (los más chicos restantes).
+
+```sql
+-- PASO 7.1: INSERT mínimo (dispara WA)
+INSERT INTO control_clausuras_runs (total_clausuras, reporte_texto, errores)
+VALUES ($total, $reporte_texto, $errores_jsonb)
+RETURNING id, ejecutado_at, whatsapp_jobid;
+
+-- PASO 7.2: UPDATE con jsonb del análisis
+UPDATE control_clausuras_runs SET
+  agendados_hoy = $agendados_hoy_jsonb,
+  criticos = $criticos_consolidado_jsonb,
+  agendados_ult_semana = $ult_semana_jsonb
+WHERE id = $run_id;
+
+-- PASO 7.3: UPDATE con el resto
+UPDATE control_clausuras_runs SET
+  vencidos_sin_evento = $vencidos_jsonb,
+  sin_caso_srt = $sin_caso_jsonb
+WHERE id = $run_id;
+```
+
+Armar `criticos_consolidado` como:
 
 ```python
-import json, os, urllib.request, urllib.error
+criticos_consolidado = {
+    'fecha': d['criticos'], 'color_mal': d['color_mal'],
+    'jurisdiccion_mal': d['jurisdiccion_mal'],
+    'duplicado_faltante': d['duplicado_faltante'],
+    'acuerdo_mal_agendado': d['acuerdo_mal_agendado'],
+    'colores_corregidos': colores_corregidos,
+    'duplicados_creados': duplicados_creados,
+}
+```
 
-# Publishable anon key de Supabase (no secreta, hardcoded porque el entorno
-# remoto del trigger no tiene env vars propias). El INSERT a
-# control_clausuras_runs está permitido para anon via RLS.
+Si alguno de los 3 pasos falla por tamaño del payload, partir aún más ese
+UPDATE en 2 con menos campos cada uno.
+
+**[DEPRECATED — solo referencia]** El intento de usar POST directo con urllib
+NO funciona en el entorno remoto:
+
+```python
+# NO USAR — el sandbox egress bloquea hosts no-allowlist
+import json, os, urllib.request, urllib.error
 SUPABASE_URL = 'https://wdgdbbcwcrirpnfdmykh.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkZ2RiYmN3Y3JpcnBuZmRteWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4MDMyMTgsImV4cCI6MjA4MDM3OTIxOH0.Rb4MVTyGIjcr5AbSdqEb0rZdGTJF5X_jNzJDol-KY3g'
+SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIs...'
 
 d = json.load(open('/tmp/analisis.json'))
 agendados_reales   = json.load(open('/tmp/agendados_reales.json'))   if os.path.exists('/tmp/agendados_reales.json')   else []
