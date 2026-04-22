@@ -85,9 +85,9 @@
     },
     {
       "name": "agendar-comunicaciones-srt",
-      "version": "1.14.2",
+      "version": "1.15.0",
       "source": "./agendar-comunicaciones-srt",
-      "description": "Agenda diariamente Dictámenes Médicos e ITMs de Mi Ventanilla SRT con plazo de 3 días hábiles + alerta al grupo Claude SRT para Constancias de Orden de Estudio y Solicitudes de Historia Clínica que requieren revisión manual del PDF",
+      "description": "Agenda diariamente comunicaciones de Mi Ventanilla SRT en Google Calendar con fecha y color correctos (Dictámenes naranja 3d, Constancias naranja 5d / azul con hora, Citaciones azul, Clausuras rojo CABA / verde Pcia / amarillo acuerdo). NO agenda ITMs. Reporta al grupo Claude SRT.",
       "author": { "name": "Matias Climent" }
     },
     {

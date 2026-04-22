@@ -169,7 +169,7 @@ def primer_nombre(nombre_actor):
         i += 1
     return partes[i].title() if i < len(partes) else partes[0].title()
 
-def proc_dictamen_itm(c, tipo_label):
+def proc_dictamen_medico(c, tipo_label):
     notif = date.fromisoformat(c['fecha_notif'])
     fecha_ev = sumar_dh(notif, 3)
     return {
@@ -469,7 +469,7 @@ def dispatch_envio_comunicacion(c):
     return SKIP_DISPATCH
 
 PROCESADORES = {
-    'Notificación de Dictamen Médico': lambda c: proc_dictamen_itm(c, 'DICTAMEN MEDICO'),
+    'Notificación de Dictamen Médico': lambda c: proc_dictamen_medico(c, 'DICTAMEN MEDICO'),
     'Notificación de Constancia de Orden de Estudio': proc_constancia_orden_estudio,
     'Notificación de Citación': proc_citacion_examen,
     'Notificación de Citación al Servicio de Homologación': proc_citacion_homologacion,
@@ -499,73 +499,139 @@ json.dump(errores, open('/tmp/errores_proceso.json','w'))
 print(f'Procesadas: {len(procesadas)} | Errores de parseo: {len(errores)}')
 ```
 
-### Paso 3 — Crear eventos en Calendar
+### Paso 2.5 — Generar `create_event_calls.json` con args EXACTOS
 
-Para cada item en `/tmp/procesadas.json`, crear 1 o más eventos (clausuras Pcia crean 2).
+⚠️ CRÍTICO para eliminar bugs repetidos (colores mal, end=start+2, defaults):
 
-**Items con `skip_calendar: True`** (ej: prestación dineraria informativa) → NO se crea evento en Calendar, pero en Paso 4 igual se marca `agendado_en_calendar_at = now()` para no reprocesarla (con `calendar_event_id = NULL` y `calendar_event_fecha = NULL`).
+Agregá este bloque inmediatamente después del Paso 2. Transforma `procesadas.json`
+en una lista plana de llamadas `create_event` con **todos los args exactos
+pre-calculados** (startTime/endTime ISO, colorId, calendarId, allDay, description).
+El Paso 3 solo hace `create_event(**item)` sin interpretar nada.
 
-**Dos modalidades según tipo** (el procesador marca con `item.con_hora = True` → A, ausente → B):
-
-**A) Evento con hora específica** (audiencias / estudios / citaciones — `item.con_hora == True`):
-Llamar `create_event` con:
-- `startTime`: `"{fecha_evento}T{HH:MM}:00"`  (hora exacta del PDF)
-- `endTime`:   `"{fecha_evento}T{HH+1:MM}:00"` (1 hora estimada)
-- NO pasar `allDay` (default false)
-- `timeZone`: `"America/Argentina/Buenos_Aires"`
-
-**B) Evento all-day** (plazos procesales — `item.con_hora` ausente/False):
-
-⚠️ CRÍTICO — fórmula **verificada en producción** contra `create_event` del MCP:
-
-```
-create_event(
-    summary="...",
-    startTime="{fecha_evento}T00:00:00Z",         # medianoche UTC
-    endTime="{fecha_evento + 1 día}T00:00:00Z",   # start + 1 día (end-exclusive)
-    allDay=True,                                   # SÍ se pasa, es parámetro del create_event
-    timeZone="America/Argentina/Buenos_Aires",
-    colorId=...,
-)
-```
-
-Ejemplo concreto — vencimiento lunes 27/4:
-`startTime="2026-04-27T00:00:00Z"`, `endTime="2026-04-28T00:00:00Z"`, `allDay=True`
-→ Calendar muestra un único evento el **lunes 27**, no "Día 1/2" y "Día 2/2".
-
-⚠️ **Errores comunes a evitar** (cada uno verificado que falla):
-- `endTime="2026-04-29T00:00:00Z"` (start + 2 días) → Calendar muestra "Día 1/2" y "Día 2/2". MAL.
-- `startTime="2026-04-27"` sin `T00:00:00Z` → MCP rechaza con "must be ISO 8601 timestamp".
-- `endTime="2026-04-27T00:00:00Z"` (igual al start) → evento inválido / 0 días.
-
-Regla invariable: **`end.date = start.date + 1 día`**.
-
-**colorId según tipo** (mapeo del estudio):
-| Tipo | colorId | Color |
-|------|---------|-------|
-| Dictamen Médico (all-day, impugnar 3d) | `'6'` | Naranja (Tangerine) |
-| Intimación Constancia (all-day, 5d contestar) | `'6'` | Naranja |
-| **Clausura con acuerdo** (all-day, 5d contestar intimación) | `'5'` | **Amarillo** (Banana) |
-| Clausura rechazo CABA (all-day) | `'11'` | **Rojo** (Tomato) |
-| Clausura rechazo Pcia (all-day, 15d y 90d) | `'10'` | **Verde** (Basil) |
-| Citación Examen / Homologación / Orden Estudio al cliente (con hora) | `'9'` | **Azul** (Blueberry) |
-
-Si `item.colorId_override` existe, usar ese. Sino `'6'` naranja default.
-
-**Común a ambas modalidades**:
-- `calendarId`: `item.calendar_override` si existe (clausuras duplican en `✱ Vencimientos` + principal), sino `"flirteador84@gmail.com"`
-- `summary`: `item.summary`
-- `description`: `"Fecha de notif: DD/MM/YYYY — auto-agendado por agendar-comunicaciones-srt"`. Para citación agregar hora/dirección/link.
-
-Loop para clausuras Pcia (2 eventos por comunicación):
 ```python
-eventos_a_crear = item.get('eventos_extra') or [item]
-for ev in eventos_a_crear:
-    # crear con calendar_override / colorId_override
-    ...
+import json
+from datetime import date, datetime, timedelta
+
+procesadas = json.load(open('/tmp/procesadas.json'))
+
+CAL_PRINC = 'flirteador84@gmail.com'
+TZ = 'America/Argentina/Buenos_Aires'
+
+def fecha_desc(fecha_notif_iso):
+    """DD/MM/YYYY para description."""
+    d = date.fromisoformat(fecha_notif_iso)
+    return d.strftime('%d/%m/%Y')
+
+def iso_allday(fecha_iso):
+    """'2026-04-27' → '2026-04-27T00:00:00Z'"""
+    return f'{fecha_iso}T00:00:00Z'
+
+def iso_allday_next(fecha_iso):
+    """'2026-04-27' → '2026-04-28T00:00:00Z' (start + 1 día, end-exclusive)"""
+    d = date.fromisoformat(fecha_iso) + timedelta(days=1)
+    return f'{d.isoformat()}T00:00:00Z'
+
+def iso_con_hora(fecha_iso, hora_str, add_hour=0):
+    """fecha='2026-04-27', hora='09:45' → '2026-04-27T09:45:00-03:00' (o +1h si add_hour=1)"""
+    hh, mm = hora_str.split(':')
+    hh = int(hh) + add_hour
+    return f'{fecha_iso}T{hh:02d}:{mm}:00-03:00'
+
+calls = []
+for item in procesadas:
+    if item.get('skip_calendar'):
+        continue
+    eventos_a_crear = item.get('eventos_extra') or [item]
+    for ev in eventos_a_crear:
+        fecha_ev = ev.get('fecha_evento') or item.get('fecha_evento')
+        if isinstance(fecha_ev, date):
+            fecha_ev = fecha_ev.isoformat()
+        summary = ev.get('summary') or item.get('summary')
+        color = ev.get('colorId_override') or item.get('colorId_override') or '6'
+        cal = ev.get('calendar_override') or item.get('calendar_override') or CAL_PRINC
+        con_hora = item.get('con_hora', False)
+
+        desc_base = f"Fecha de notif: {fecha_desc(item['fecha_notif'])} — auto-agendado por agendar-comunicaciones-srt"
+        # Para eventos con hora, agregar hora/dirección/link al description
+        descripcion = desc_base
+        if con_hora:
+            extras = []
+            if item.get('hora'):      extras.append(f"Hora: {item['hora']}")
+            if item.get('direccion'): extras.append(f"Dirección: {item['direccion']}")
+            if item.get('link'):      extras.append(item['link'])
+            if item.get('estudios'):  extras.append(f"Estudios: {item['estudios'][:120]}")
+            if extras:
+                descripcion = desc_base + ' | ' + ' | '.join(extras)
+
+        call = {
+            'calendarId': cal,
+            'summary': summary,
+            'timeZone': TZ,
+            'colorId': color,
+            'description': descripcion,
+            # fields útiles para Paso 4 (marcar en Supabase)
+            '_comunicacion_id': item.get('comunicacion_id'),
+            '_srt': item.get('srt'),
+            '_fecha_evento': fecha_ev,
+            '_nombre_actor': item.get('nombre_actor'),
+            '_tipo': item.get('tipo_comunicacion'),
+        }
+        if con_hora:
+            hora = item.get('hora')
+            call['startTime'] = iso_con_hora(fecha_ev, hora, add_hour=0)
+            call['endTime']   = iso_con_hora(fecha_ev, hora, add_hour=1)
+            # NO pasar allDay para con_hora
+        else:
+            call['startTime'] = iso_allday(fecha_ev)
+            call['endTime']   = iso_allday_next(fecha_ev)
+            call['allDay']    = True
+        calls.append(call)
+
+json.dump(calls, open('/tmp/create_event_calls.json','w'), ensure_ascii=False)
+print(f'Llamadas a create_event pre-calculadas: {len(calls)}')
+# Sanity check: imprimir primeros 2 para inspección
+for c in calls[:2]:
+    print(json.dumps({k:v for k,v in c.items() if not k.startswith('_')}, ensure_ascii=False))
 ```
 
-Chequear response. Si `status: confirmed` → marcar `agendado_ok=True` y guardar `event_id`. Si falla, guardar en errores.
+### Paso 3 — Crear eventos en Calendar (LOOP TRIVIAL, no interpretar nada)
+
+⚠️ **NO calcular fechas, colores, calendars ni defaults.** Todos los args ya
+están pre-calculados en `/tmp/create_event_calls.json` por el Paso 2.5.
+
+Para cada item del JSON:
+1. Tomar los fields SIN los que empiezan con `_` (son metadata para Paso 4)
+2. Llamar `create_event` con esos args **tal cual** — copiar-pegar literal
+3. Guardar el `event_id` de la response en `/tmp/eventos_creados.json` con el
+   metadata (`_comunicacion_id`, `_srt`, `_fecha_evento`)
+
+Ejemplo de item que viene del JSON:
+
+```json
+{
+  "calendarId": "flirteador84@gmail.com",
+  "summary": "MIÑO PABLO GASTON-571662/25- VENCE CONTESTAR INTIMACION SRT",
+  "timeZone": "America/Argentina/Buenos_Aires",
+  "colorId": "6",
+  "description": "Fecha de notif: 21/04/2026 — auto-agendado por agendar-comunicaciones-srt",
+  "startTime": "2026-04-28T00:00:00Z",
+  "endTime": "2026-04-29T00:00:00Z",
+  "allDay": true,
+  "_comunicacion_id": "xxx",
+  "_srt": "571662/25",
+  "_fecha_evento": "2026-04-28",
+  "_nombre_actor": "MIÑO PABLO GASTON",
+  "_tipo": "Notificación de Constancia de Orden de Estudio"
+}
+```
+
+La llamada a `create_event` recibe los 7 primeros fields (`calendarId`,
+`summary`, `timeZone`, `colorId`, `description`, `startTime`, `endTime`,
+`allDay`) — literal, sin modificar. Los que empiezan con `_` son metadata
+para el Paso 4 (el marcado en Supabase).
+
+Si la respuesta trae `"status": "confirmed"` → OK, guardar el `id` del evento.
+Si falla → guardar en `/tmp/errores_calendar.json`.
 
 ### Paso 4 — Marcar como procesado en Supabase
 
