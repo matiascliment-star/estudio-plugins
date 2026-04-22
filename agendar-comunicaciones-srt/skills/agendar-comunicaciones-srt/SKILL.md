@@ -758,6 +758,64 @@ if not procesadas and not errores:
 open('/tmp/reporte.txt','w').write('\n'.join(L))
 ```
 
+### Paso 6.5 — Post-check de sanity (detectar items salteados)
+
+Después de generar el reporte, ejecutar una query adicional a Supabase para
+detectar si **quedaron comunicaciones dentro de la ventana que NO se agendaron**
+en esta corrida (indicaría que el agente se saltó items por sobrecarga, cadena
+parcial, etc.). Si las hay, apendear un bloque **⚠️ ALERTA** al `/tmp/reporte.txt`
+antes del INSERT del Paso 7.
+
+```sql
+-- Misma ventana + mismos tipos procesables del Paso 1, pero filtrando solo
+-- los que quedaron sin agendar (candidatos huérfanos después del run actual)
+SELECT m.srt_expediente_nro, m.tipo_comunicacion,
+       (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_notif,
+       c.nombre
+FROM comunicaciones_miventanilla m
+LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
+WHERE m.tipo_comunicacion IN (
+    'Notificación de Dictamen Médico',
+    'Notificación de Constancia de Orden de Estudio',
+    'Notificación de Citación',
+    'Notificación de Citación al Servicio de Homologación',
+    'Notificación de Acto Administrativo',
+    'Envío de Comunicación'
+  )
+  AND m.agendado_en_calendar_at IS NULL
+  AND (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+      BETWEEN ((now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date - interval '2 days')::date
+          AND (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+ORDER BY m.fecha_notificacion;
+```
+
+Si la query devuelve **0 filas**: todo OK, no tocar el reporte.
+
+Si devuelve **> 0 filas**: son candidatos que el skill no agendó pero debería
+haber intentado (salvo los que son `Envío de Comunicación` sin "prestación
+dineraria" en el detalle — esos se filtran silenciosos; y los Acto Administrativo
+sin "Clausura" en detalle). Apendear al reporte:
+
+```python
+# Filtrar los que sí deberían estar agendados (descartar "Envío de Comunicación"
+# y "Acto Administrativo" que no matchean sub-tipos procesables)
+import json
+huerfanos = [h for h in huerfanos_query_result if not (
+    (h['tipo_comunicacion'] == 'Envío de Comunicación' and 'prest' not in (h.get('detalle','') or '').lower())
+    or (h['tipo_comunicacion'] == 'Notificación de Acto Administrativo' and 'Clausura' not in (h.get('detalle','') or ''))
+)]
+if huerfanos:
+    with open('/tmp/reporte.txt','a') as f:
+        f.write('\n\n⚠️ *ALERTA — QUEDARON COMUNICACIONES SIN AGENDAR EN ESTA CORRIDA*\n')
+        f.write('_(Revisar manualmente. Puede ser que el agente se haya salteado items,'
+                ' o que el scraper todavía no haya subido el texto del PDF.)_\n')
+        for h in huerfanos:
+            f.write(f"• {h.get('nombre') or '(sin caso)'} ({h['srt_expediente_nro']}) "
+                    f"{h['tipo_comunicacion']} notif {h['fecha_notif']}\n")
+```
+
+El próximo run (mañana 9am o esta tarde 15:00 AR) los vuelve a intentar.
+
 ### Paso 7 — INSERT run (dispara WA al grupo)
 
 ```sql
