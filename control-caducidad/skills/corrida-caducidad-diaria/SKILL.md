@@ -293,6 +293,20 @@ Devuelve JSON `{"webUrl": "...", "id": "...", "name": "..."}`. Usar `webUrl` com
 
 **5 mensajes por chica (Eliana, Mara, Kuki, Paula, Clara) + 1 mensaje ejecutivo a Matías.**
 
+⚠️ **REGLA DURA — anti idle-timeout (lección 2026-04-22):**
+
+En la corrida del 2026-04-22 la sesión de Claude se cortó con `Stream idle timeout - partial response received` justo antes de enviar los WhatsApp. La causa fue que, en vez de mandar los WA directo con las MCP tools, el orquestador se puso a escribir un **helper Python local** que juntaba los 50 registros de Supabase, formateaba los 5 mensajes enormes en memoria y recién ahí llamaba al MCP. El stream estuvo silencioso >60 seg mientras razonaba el código del helper y el gateway cerró la conexión. Resultado: se generaron los 12 DOCX, se subieron a OneDrive, se loguearon las 50 filas en `caducidad_corridas` — pero las chicas no recibieron nada.
+
+**Cómo evitarlo:**
+
+1. **Nunca escribir helpers Python ad-hoc para mandar WA.** Los mensajes se arman en el prompt (en memoria del agente) y se mandan **uno por uno** con las MCP tools `mcp__whatsapp__wa_send_text` y `mcp__whatsapp__wa_send_document`. Un tool call por mensaje. Nada de scripts intermedios, pipelines, ni edge functions llamadas desde Python.
+2. **Mandar incremental, no al final.** Apenas se completan las tandas de una chica, mandar su WA. Ej: al cerrar tanda 2 (CABA 6-10), ya sale el WA de Eliana. Si la sesión se corta después, no se pierde todo — solo lo que quedó pendiente.
+3. **Particionar mensajes largos.** Si un WA supera ~3500 caracteres (o ~6-7 expedientes con el bloque estructurado completo), partirlo en 2-3 mensajes consecutivos: `[Parte 1/3] 🚨 CRÍTICOS`, `[Parte 2/3] PENDIENTES 1-4`, `[Parte 3/3] PENDIENTES 5-N`. Mejor 3 WA cortos que 1 gigante que obligue al modelo a razonar 30 seg antes del primer token.
+4. **No acumular contexto innecesario.** Traer los datos estructurados de cada chica con query acotada (`WHERE responsable_asignada = 'X' AND fecha = ...`) — no traer las 50 filas a memoria del orquestador.
+5. **Cuando manda el mensaje a Matías (resumen ejecutivo), hacerlo al final y conciso** — un solo WA, solo contadores y lista de críticos, no re-explayar los análisis.
+
+**Destinatarios durante prueba:** todo al `5491140439075`. Cada WA se prefija con `*[Para: NOMBRE]*` en el primer renglón para que Matías sepa a quién se habría enviado en producción.
+
 Estructura del mensaje por chica:
 
 ```
