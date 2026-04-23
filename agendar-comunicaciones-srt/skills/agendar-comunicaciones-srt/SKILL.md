@@ -180,68 +180,91 @@ def proc_dictamen_medico(c, tipo_label):
     }
 
 def proc_constancia_orden_estudio(c):
-    """Dos variantes según contenido del PDF:
-    1) Intimación al abogado/trabajador (pide describir accidente + docs) → agenda 5 hábiles
-    2) Orden de estudio médico al cliente (con fecha/hora/dirección prestador) → aviso al grupo + agenda fecha
+    """La distinción intimación vs estudio al cliente se basa en el DETALLE, no en el texto.
+
+    Patrones de detalle observados (histórico: 200 casos analizados):
+      - 'Sol Historia Clinica' (90%) → intimación al abogado, 5 hábiles contestar
+      - Cualquier otro ('al Patrocinante ITM', 'al Patrocinante', etc.) → estudio médico
+        al cliente, hay que leer fecha/hora del PDF
+
+    Si es estudio pero NO hay texto_extraido (PDF escaneado sin OCR), retornar flag
+    'requiere_revision_manual' para que el reporte alerte y Mara agende manual.
+    Nunca defaultear a intimación cuando no se puede leer — el detalle manda.
     """
+    detalle = (c.get('detalle') or '').lower()
+    es_intimacion = 'sol historia clinica' in detalle or 'sol. historia clinica' in detalle
     t = c.get('texto_extraido') or ''
     notif = date.fromisoformat(c['fecha_notif'])
 
-    # Caso 2: orden de estudio real al cliente
-    if 'Fecha/Hora de Prestación' in t or 'Fecha/Hora de Prestac' in t:
-        m_fh = re.search(r'Fecha/Hora de Prestac[^:]*:\s*(\d{2}/\d{2}/\d{4})\s*[-\s]+\s*(\d{1,2}[:.]?\d{2})', t)
-        if not m_fh: return None
-        fecha_str = m_fh.group(1)
-        hora_str = m_fh.group(2).replace('.', ':')
-        fecha_ev = date(*[int(x) for x in reversed(fecha_str.split('/'))])
-        # Estudios solicitados (texto después de "ESTUDIOS SOLICITADOS" hasta "Fecha/Hora")
-        m_est = re.search(r'ESTUDIOS\s+SOLICITADOS[^\n]*\n(.*?)(?:Fecha/Hora|a\s*Fecha/Hora)', t, re.S | re.I)
-        estudios_raw = (m_est.group(1).strip() if m_est else '')
-        estudios = re.sub(r'\s+', ' ', estudios_raw)[:180]
-        # Dirección: "Lugar donde se efectuarán los estudios: XXX"
-        m_dir = re.search(r'Lugar\s+donde\s+se\s+efectuar[aá]n\s+los?\s+estudios?[:\s]+([A-Z0-9\s\.\-,/]+?)(?:Local|Código|Provincia|Tel)', t, re.S | re.I)
-        direccion = re.sub(r'\s+', ' ', (m_dir.group(1).strip() if m_dir else '')).strip()
-        m_loc = re.search(r'Localidad[^:]*:\s*([A-Z\s]+?)\s*/', t)
-        localidad = (m_loc.group(1).strip() if m_loc else '')
-        dir_completa = f"{direccion}, {localidad}".strip(', ')
-        dia_sem = DIAS_SEM[fecha_ev.weekday()]
-        pn = primer_nombre(c['nombre_actor']) if c.get('nombre_actor') else ''
-        saludo = f"Hola {pn}!" if pn else "Hola!"
-        requiere = estudio_requiere_asesoramiento(estudios)
-        aviso_previo = (
-            "⚠️ *Importante*: antes de asistir comunicate con nosotros por acá para "
-            "recibir el asesoramiento previo.\n\n"
-        ) if requiere else ""
-        aviso = (
-            f"{saludo} Te avisamos que la SRT te ordenó un *estudio médico* "
-            f"en el marco de tu expediente. Tenés que ir a hacértelo:\n\n"
-            f"🩺 Estudio: {estudios}\n"
-            f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
-            f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
-            f"{aviso_previo}"
-            f"Llevá tu DNI. *Confirmanos por acá si vas a poder ir.* "
-            f"Si no podés, avisanos con tiempo así lo reprogramamos."
-        )
+    # ─── CASO 1: INTIMACIÓN AL ABOGADO (detalle dice Sol Historia Clinica) ───
+    if es_intimacion:
+        fecha_ev = sumar_dh(notif, 5)
         return {
             'fecha_evento': fecha_ev,
-            'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- ESTUDIO SRT {hora_str} {estudios[:60]}",
-            'aviso_cliente': aviso,
-            'hora': hora_str,
-            'direccion': dir_completa,
-            'estudios': estudios,
-            'subtipo': 'orden_estudio_cliente',
-            'con_hora': True,
-            'colorId_override': '9',  # azul: estudio al cliente (orden prestador)
+            'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- VENCE CONTESTAR INTIMACION SRT",
+            'aviso_cliente': None,
+            'subtipo': 'intimacion_abogado',
+            'colorId_override': '6',  # naranja: intimación (plazo procesal)
         }
 
-    # Caso 1: intimación al abogado (default si no hay Fecha/Hora Prestación)
-    fecha_ev = sumar_dh(notif, 5)
+    # ─── CASO 2: ESTUDIO MÉDICO AL CLIENTE (detalle NO dice Sol Historia Clinica) ───
+    # Necesitamos parsear Fecha/Hora de Prestación del PDF. Si no podemos → revisión manual.
+    if not t or 'Fecha/Hora de Prestac' not in t:
+        return {
+            'subtipo': 'requiere_revision_manual',
+            'razon': 'estudio al cliente sin texto extraído (PDF escaneado o scraper pendiente) — abrir en Mi Ventanilla',
+            'skip_calendar': True,
+        }
+
+    m_fh = re.search(r'Fecha/Hora de Prestac[^:]*:\s*(\d{2}/\d{2}/\d{4})\s*[-\s]+\s*(\d{1,2}[:.]?\d{2})', t)
+    if not m_fh:
+        return {
+            'subtipo': 'requiere_revision_manual',
+            'razon': 'estudio al cliente pero regex Fecha/Hora no matcheó — revisar formato del PDF',
+            'skip_calendar': True,
+        }
+
+    fecha_str = m_fh.group(1)
+    hora_str = m_fh.group(2).replace('.', ':')
+    fecha_ev = date(*[int(x) for x in reversed(fecha_str.split('/'))])
+    # Estudios solicitados (texto después de "ESTUDIOS SOLICITADOS" hasta "Fecha/Hora")
+    m_est = re.search(r'ESTUDIOS\s+SOLICITADOS[^\n]*\n(.*?)(?:Fecha/Hora|a\s*Fecha/Hora)', t, re.S | re.I)
+    estudios_raw = (m_est.group(1).strip() if m_est else '')
+    estudios = re.sub(r'\s+', ' ', estudios_raw)[:180]
+    # Dirección: "Lugar donde se efectuarán los estudios: XXX"
+    m_dir = re.search(r'Lugar\s+donde\s+se\s+efectuar[aá]n\s+los?\s+estudios?[:\s]+([A-Z0-9\s\.\-,/]+?)(?:Local|Código|Provincia|Tel)', t, re.S | re.I)
+    direccion = re.sub(r'\s+', ' ', (m_dir.group(1).strip() if m_dir else '')).strip()
+    m_loc = re.search(r'Localidad[^:]*:\s*([A-Z\s]+?)\s*/', t)
+    localidad = (m_loc.group(1).strip() if m_loc else '')
+    dir_completa = f"{direccion}, {localidad}".strip(', ')
+    dia_sem = DIAS_SEM[fecha_ev.weekday()]
+    pn = primer_nombre(c['nombre_actor']) if c.get('nombre_actor') else ''
+    saludo = f"Hola {pn}!" if pn else "Hola!"
+    requiere = estudio_requiere_asesoramiento(estudios)
+    aviso_previo = (
+        "⚠️ *Importante*: antes de asistir comunicate con nosotros por acá para "
+        "recibir el asesoramiento previo.\n\n"
+    ) if requiere else ""
+    aviso = (
+        f"{saludo} Te avisamos que la SRT te ordenó un *estudio médico* "
+        f"en el marco de tu expediente. Tenés que ir a hacértelo:\n\n"
+        f"🩺 Estudio: {estudios}\n"
+        f"📅 *{dia_sem} {fecha_ev.strftime('%d/%m/%Y')}* a las *{hora_str}hs*\n"
+        f"📍 {dir_completa or '(ver PDF en Mi Ventanilla)'}\n\n"
+        f"{aviso_previo}"
+        f"Llevá tu DNI. *Confirmanos por acá si vas a poder ir.* "
+        f"Si no podés, avisanos con tiempo así lo reprogramamos."
+    )
     return {
         'fecha_evento': fecha_ev,
-        'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- VENCE CONTESTAR INTIMACION SRT",
-        'aviso_cliente': None,
-        'subtipo': 'intimacion_abogado',
-        'colorId_override': '6',  # naranja: intimación (plazo procesal)
+        'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- ESTUDIO SRT {hora_str} {estudios[:60]}",
+        'aviso_cliente': aviso,
+        'hora': hora_str,
+        'direccion': dir_completa,
+        'estudios': estudios,
+        'subtipo': 'orden_estudio_cliente',
+        'con_hora': True,
+        'colorId_override': '9',  # azul: estudio al cliente (orden prestador)
     }
 
 def proc_citacion_examen(c):
@@ -739,6 +762,13 @@ if prest_din:
     L.append('_(Informativo. Abrir el PDF en Mi Ventanilla y controlar el cálculo.)_')
     for p in prest_din:
         L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))}")
+
+rev_manual = [p for p in procesadas if p.get('subtipo') == 'requiere_revision_manual']
+if rev_manual:
+    L.append('\n📎 *REVISAR PDF MANUAL — scraper no extrajo texto*')
+    L.append('_(PDFs escaneados sin OCR. Abrir en Mi Ventanilla, leer la fecha/hora del estudio y agendarlos manualmente.)_')
+    for p in rev_manual:
+        L.append(f"• {p.get('nombre_actor') or '(sin nombre)'} ({p['srt']}) — {p['tipo_comunicacion']}: {p.get('razon','(sin razón)')}")
 
 if sin_grupo_citacion:
     L.append('\n📞 *CITACIONES SIN GRUPO WA DEL CLIENTE — copiar y pegar al cliente*')
