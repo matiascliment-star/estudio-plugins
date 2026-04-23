@@ -617,18 +617,42 @@ for c in calls[:2]:
     print(json.dumps({k:v for k,v in c.items() if not k.startswith('_')}, ensure_ascii=False))
 ```
 
-### Paso 3 — Crear eventos en Calendar (LOOP TRIVIAL, no interpretar nada)
+### Paso 3 — Crear eventos en Calendar + marcar en Supabase (EN LOTES DE 15)
+
+⚠️ **PROCESAR EN LOTES DE 15 MÁXIMO.** Si hay más de 15 eventos en
+`/tmp/create_event_calls.json`, dividirlos en grupos de 15 y procesarlos en
+tandas separadas. Dentro de cada lote: crear los eventos de Calendar Y
+marcarlos en Supabase antes de pasar al siguiente lote. Esto evita que el
+contexto se llene con 65+ tool results y el agente timeoutee por stream idle.
 
 ⚠️ **NO calcular fechas, colores, calendars ni defaults.** Todos los args ya
 están pre-calculados en `/tmp/create_event_calls.json` por el Paso 2.5.
 
-Para cada item del JSON:
-1. Tomar los fields SIN los que empiezan con `_` (son metadata para Paso 4)
-2. Llamar `create_event` con esos args **tal cual** — copiar-pegar literal
-3. Guardar el `event_id` de la response en `/tmp/eventos_creados.json` con el
-   metadata (`_comunicacion_id`, `_srt`, `_fecha_evento`)
+**Pseudocódigo del loop:**
 
-Ejemplo de item que viene del JSON:
+```python
+import json, os
+calls = json.load(open('/tmp/create_event_calls.json'))
+BATCH_SIZE = 15
+total = len(calls)
+print(f'Total eventos a crear: {total}. Procesaré en {(total + BATCH_SIZE - 1) // BATCH_SIZE} lote(s) de {BATCH_SIZE}.')
+# No correr este bloque — es referencia. La ejecución real:
+# para cada lote de 15 items:
+#   1. para cada item, llamar create_event con los 8 fields públicos
+#   2. recolectar (comunicacion_id, event_id, fecha_evento) de cada respuesta OK
+#   3. hacer UPDATE en Supabase de ESE lote (no del total)
+#   4. appendear a /tmp/eventos_creados.json y /tmp/errores_calendar.json
+#   5. print "Lote N/M terminado: X ok, Y fail"
+#   6. recién después pasar al lote siguiente
+```
+
+Para cada item del lote:
+1. Tomar los fields SIN los que empiezan con `_` (son metadata del marcado)
+2. Llamar `create_event` con esos args **tal cual** — copiar-pegar literal
+3. Si respuesta trae `"status": "confirmed"` → OK, guardar el `id` del evento
+4. Si falla → guardar en `/tmp/errores_calendar.json`
+
+Ejemplo de item del JSON (fields públicos = los que NO empiezan con `_`):
 
 ```json
 {
@@ -648,15 +672,9 @@ Ejemplo de item que viene del JSON:
 }
 ```
 
-La llamada a `create_event` recibe los 7 primeros fields (`calendarId`,
-`summary`, `timeZone`, `colorId`, `description`, `startTime`, `endTime`,
-`allDay`) — literal, sin modificar. Los que empiezan con `_` son metadata
-para el Paso 4 (el marcado en Supabase).
-
-Si la respuesta trae `"status": "confirmed"` → OK, guardar el `id` del evento.
-Si falla → guardar en `/tmp/errores_calendar.json`.
-
-### Paso 4 — Marcar como procesado en Supabase
+**Al final de cada lote**, antes de pasar al siguiente, hacer el UPDATE en
+Supabase de los items que acabás de crear en ese lote (batch UPDATE via
+SQL `IN` o uno por uno, lo que sea más cómodo):
 
 ```sql
 UPDATE comunicaciones_miventanilla
@@ -666,6 +684,18 @@ SET agendado_en_calendar_at = now(),
     calendar_event_fecha = $fecha_evento
 WHERE id = $comunicacion_id;
 ```
+
+Recién cuando hiciste el UPDATE del lote actual pasás al siguiente. Este
+patrón "crear 15 → marcar 15 → siguiente lote" es CRÍTICO: si el agente se
+corta a mitad del procesamiento, los lotes ya terminados quedaron con el
+`agendado_en_calendar_at` seteado, y el próximo run ignora esas
+comunicaciones automáticamente.
+
+### Paso 4 — (integrado en Paso 3)
+
+El marcado en Supabase ya se hace dentro del Paso 3 al final de cada lote.
+Este paso queda como número histórico para no romper referencias en el
+resto del documento.
 
 ### Paso 5 — Avisos al grupo del cliente (SOLO citaciones)
 
