@@ -1,6 +1,6 @@
 {
   "name": "estudio-plugins",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Plugins del Estudio García Climent para Cowork",
   "owner": {
     "name": "Estudio García Climent"
@@ -60,6 +60,13 @@
       "version": "1.0.0",
       "source": "./impugnar-pericia-noe",
       "description": "Control e impugnacion de pericias medicas laborales - Modelo Noe (checklist estilo Noe)",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "impugnar-pericia-tamara",
+      "version": "1.0.0",
+      "source": "./impugnar-pericia-tamara",
+      "description": "Control e impugnacion de pericias medicas laborales - Modelo Tamara (planilla DOCX comparativa Demandada vs Pericia)",
       "author": { "name": "Matias Climent" }
     },
     {

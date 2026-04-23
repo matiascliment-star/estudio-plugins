@@ -1,0 +1,9 @@
+{
+  "name": "impugnar-pericia-tamara",
+  "version": "1.0.0",
+  "description": "Control e impugnacion de pericias medicas laborales - Modelo Tamara. Genera la planilla DOCX en el formato exacto que usa Tamara (tabla comparativa Demandada vs Pericia + tabla de control de pericia) usando el template literal del estudio.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["pericia", "impugnacion", "tamara", "baremo", "659", "549", "laboral", "medica", "perito", "incapacidad", "pjn", "scba", "mev", "control", "planilla"]
+}
