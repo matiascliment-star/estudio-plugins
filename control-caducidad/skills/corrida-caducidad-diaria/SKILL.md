@@ -249,7 +249,7 @@ Esta actualización corre DESPUÉS de devolver el JSON del análisis, como últi
 Los subagentes usan `scripts/generar_escrito.py` que:
 1. Carga el modelo `modelos/{tipo_impulso}.md` (texto con placeholders).
 2. Reemplaza `{{placeholders}}` con datos del caso.
-3. Genera DOCX con **formato memoria** (Times 12, interlineado 1.5, márgenes 2/2/3/2, sangría 1.25cm, título en negrita+subrayado).
+3. Genera DOCX usando el helper canónico `escritos-judiciales/scripts/formato_escrito.py` (Times New Roman 12 pt, interlineado 1.5, márgenes 2/2/3/2, sangría 1.25 cm, título justificado negrita+subrayado, encabezado tribunal a la izquierda, párrafo letrado con sangría 1.5 cm y nombre/carátula en negrita, secciones con sangría 1.25 cm y línea en blanco antes). Spec completa en `escritos-judiciales/references/formato-escrito.md`.
 4. Guarda en `/tmp/caducidad/{fecha}/{numero_safe}_{tipo}.docx`.
 
 ### Fase 4: Distribución de borradores

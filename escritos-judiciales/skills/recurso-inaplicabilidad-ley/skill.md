@@ -51,30 +51,56 @@ Leer de `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`):
 
 ## Formato del documento
 
-### Estilo obligatorio
-- **Font:** Arial 12pt
-- **Interlineado:** 1.5
-- **Márgenes:** 3cm izq, 2cm der, 2cm arriba, 2cm abajo
-- **Títulos de sección:** negrita + subrayado
-- **Título principal:** centrado, negrita, subrayado
-- **Space after párrafos:** 6pt
-- **NO usar viñetas.** Todo en prosa. Enumeraciones a), b), c) se permiten en el petitorio.
+**FUENTE ÚNICA DE VERDAD:**
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/references/formato-escrito.md`
++ helper en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts/formato_escrito.py`.
+
+**NO inventar formato propio. NO copiar bloques de python-docx hardcodeados.**
+
+Resumen:
+- **Times New Roman 12 pt** (NO Arial), interlineado 1.5
+- Cuerpo justificado, sangría 1.25 cm
+- Título principal: **JUSTIFICADO** (no centrado), sin sangría, negrita+subrayado
+- Encabezado tribunal ("EXCMA. SUPREMA CORTE…"): izquierda, sin sangría
+- Párrafo letrado de intro: sangría 1.5 cm, nombre y carátula en negrita
+- Títulos de sección: justificado, sangría 1.25 cm, negrita+subrayado, línea en blanco antes
+- Items petitorio: justificado, sin sangría
+- Firma: centrada, nombre en negrita
+- Márgenes: 3 cm izq, 2 cm der/sup/inf
+- **NO usar viñetas.** Prosa. Enumeraciones a), b), c) sólo en el petitorio.
+
+Generación con el helper:
 
 ```python
-from docx import Document
-from docx.shared import Pt, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+import sys
+sys.path.insert(0, "/Users/matiaschristiangarciacliment/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts")
 
-doc = Document()
-for s in doc.sections:
-    s.top_margin = Cm(2); s.bottom_margin = Cm(2)
-    s.left_margin = Cm(3); s.right_margin = Cm(2)
+from formato_escrito import (
+    nuevo_documento, titulo_principal, encabezado_tribunal,
+    parrafo_letrado, titulo_seccion, parrafo, firma,
+)
 
-style = doc.styles['Normal']
-style.font.name = 'Arial'; style.font.size = Pt(12)
-style.paragraph_format.line_spacing = 1.5
-style.paragraph_format.space_after = Pt(6)
+doc = nuevo_documento()
+titulo_principal(doc, "INTERPONE RECURSO EXTRAORDINARIO DE INAPLICABILIDAD DE LEY")
+encabezado_tribunal(doc, "EXCMA. SUPREMA CORTE DE JUSTICIA DE LA PROVINCIA DE BUENOS AIRES:")
+parrafo_letrado(
+    doc,
+    "MATÍAS CHRISTIAN GARCÍA CLIMENT",
+    ", abogado, T° 46 F° 393 C.A.S.I., con domicilio electrónico en 20313806198@notificaciones.scba.gov.ar, en autos ",
+    '"JUAREZ, JUAN c/ LA SEGUNDA ART s/ ACCIDENTE DE TRABAJO" (causa N° XXXXX)',
+    ", a V.E. respetuosamente digo:",
+)
+titulo_seccion(doc, "I. OBJETO")
+parrafo(doc, "Vengo en tiempo y forma a interponer recurso extraordinario...")
+# ... más secciones
+firma(doc)
+doc.save("/path/al/recurso.docx")
 ```
+
+Para SUBIR al MEV: convertir DOCX a HTML (con mammoth) y usar `scba_guardar_borrador`.
+El HTML debe respetar la spec — cuerpo justificado con `text-indent: 1.25cm`, etc.
+Ver `formato-escrito.md` para el detalle de los estilos HTML.
 
 ## Estructura obligatoria del recurso
 

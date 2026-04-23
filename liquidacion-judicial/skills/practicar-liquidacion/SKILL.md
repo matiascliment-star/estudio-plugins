@@ -151,9 +151,41 @@ Usar el script Python con python-docx. El documento tiene esta estructura:
 ```
 
 #### Formato general
-- Fuente: Arial, interlineado 1.5, alineación justificada
-- Títulos: bold + underline
-- Márgenes: 2cm arriba/abajo, 2.5cm izq/der
+
+**FUENTE ÚNICA DE VERDAD:**
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/references/formato-escrito.md`
++ helper en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts/formato_escrito.py`.
+
+Para la PARTE NARRATIVA del escrito (fuera de la tabla), usar el helper:
+- Times New Roman 12 pt, interlineado 1.5, justificado, sangría 1.25 cm
+- Márgenes 3 cm izq, 2 cm der/sup/inf
+- Títulos de sección (I, II, III, IV) con `titulo_seccion()`
+- Encabezado del tribunal con `encabezado_tribunal()`
+- Párrafo letrado con `parrafo_letrado()`
+- Firma final con `firma()`
+
+```python
+import sys
+sys.path.insert(0, "/Users/matiaschristiangarciacliment/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts")
+from formato_escrito import (
+    nuevo_documento, titulo_principal, encabezado_tribunal,
+    parrafo_letrado, titulo_seccion, parrafo, firma,
+)
+
+doc = nuevo_documento()
+titulo_principal(doc, "PRACTICA LIQUIDACIÓN")
+encabezado_tribunal(doc, "Sr. Juez:")
+parrafo_letrado(doc, "MATÍAS CHRISTIAN GARCÍA CLIMENT", ", abogado, ...", "carátula", ", a V.S. digo:")
+titulo_seccion(doc, "I. PRACTICA LIQUIDACIÓN")
+parrafo(doc, "Vengo a practicar liquidación...")
+# acá insertar la TABLA con doc.add_table() respetando los estilos de tabla descritos abajo
+firma(doc)
+```
+
+**Para la TABLA de liquidación**: respetar el formato propio de tablas descrito
+en la sección "Formato de la tabla" (Calibri 9pt, colores, bordes). Las tablas
+NO usan Times New Roman — son la única excepción al formato general.
 
 #### Formato de la tabla
 Tabla profesional con estilos:

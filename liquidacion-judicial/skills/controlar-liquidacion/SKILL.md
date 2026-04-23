@@ -181,7 +181,7 @@ Escrito DOCX con:
 - Título: "IMPUGNA LIQUIDACIÓN / CONTESTA LIQUIDACIÓN"
 - Observaciones rubro por rubro con cálculo correcto
 - Liquidación en subsidio (usar formato de tabla del skill practicar-liquidacion)
-- Formato: Arial, interlineado 1.5, títulos bold + underline, tabla profesional
+- Formato: usar el helper `escritos-judiciales/scripts/formato_escrito.py` (Times New Roman 12 pt, interlineado 1.5, justificado, sangría 1.25 cm, títulos bold+underline). Spec completa en `escritos-judiciales/references/formato-escrito.md`. Las tablas siguen su propio formato (Calibri 9 pt) según el skill `practicar-liquidacion`.
 
 ### Para impugnación de juzgado/perito (Modo 3)
 Escrito DOCX con tono más formal:

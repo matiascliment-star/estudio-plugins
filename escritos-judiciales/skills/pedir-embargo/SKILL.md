@@ -58,87 +58,81 @@ El usuario puede indicar o el agente debe inferir:
 
 ### Paso 4: Generar el DOCX
 
-**FORMATO OBLIGATORIO** (replicar exactamente):
-- Fuente: Arial 12pt
-- Interlineado: 1.5
-- Espaciado después de párrafo: ~5pt (Emu 63500)
-- Alineación: Justificado en TODO el documento
-- Márgenes: Superior 2cm, Inferior 2cm, Izquierdo 3cm, Derecho 2cm
+**FUENTE ÚNICA DE VERDAD:**
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/references/formato-escrito.md`
++ helper en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts/formato_escrito.py`.
+
+**NO inventar formato propio. NO copiar bloques de python-docx hardcodeados.**
+
+Resumen del formato:
+- Times New Roman 12 pt (NO Arial), interlineado 1.5
+- Cuerpo justificado, sangría 1.25 cm
+- Título principal: justificado, negrita+subrayado, sin sangría
+- Encabezado tribunal ("Sr. Juez:"): izquierda, sin sangría
+- Párrafo letrado: sangría 1.5 cm, nombre y carátula en negrita
+- Items (1°, 2°, 3°): justificado, sin sangría, números en negrita
+- Cierre: centrado (NO usar tabs)
+
+Para generar el escrito usar el helper. Si necesitás runs con negritas
+parciales (monto en negrita en mitad de un párrafo), construí el párrafo
+manualmente con `add_paragraph()` + `add_run()` pero respetando el formato
+canónico (Times New Roman 12 pt, sangría 1.25 cm, justificado).
+
+```python
+import sys
+sys.path.insert(0, "/Users/matiaschristiangarciacliment/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts")
+
+from formato_escrito import (
+    nuevo_documento, titulo_principal, encabezado_tribunal,
+    parrafo_letrado, parrafo, FUENTE, TAMANO_PT,
+)
+from docx.shared import Pt, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+doc = nuevo_documento()
+titulo_principal(doc, "SE ORDENE TRABAR EMBARGO")
+encabezado_tribunal(doc, "Sr. Juez:")
+parrafo_letrado(
+    doc,
+    "MATÍAS CHRISTIAN GARCÍA CLIMENT",
+    ", abogado, T° 97 F° 16 C.P.A.C.F., en representación de la PARTE ACTORA, en autos ",
+    '"GIMÉNEZ, JUAN c/ ART X s/ ACCIDENTE" Expte. N° 12345/2023',
+    ", a V.S. digo:",
+)
+# Cuerpo del pedido (ver estructura abajo) usando parrafo() o add_paragraph()
+# para los párrafos con runs mixtos (monto en negrita, etc.).
+```
 
 **ESTRUCTURA DEL ESCRITO** (modelo oficial del estudio):
 
 ```
-[Título en NEGRITA + SUBRAYADO, justificado]
-SE ORDENE TRABAR EMBARGO – [COMPLEMENTO SI CORRESPONDE]
+SE ORDENE TRABAR EMBARGO – [COMPLEMENTO SI CORRESPONDE]    ← titulo_principal
+Sr. Juez:                                                  ← encabezado_tribunal
+[NOMBRE ABOGADO en NEGRITA], abogado, T° 97 F° 16…,        ← parrafo_letrado
+   en autos "[CARATULA NEGRITA]" [NUMERO NEGRITA], a VS digo:
 
-Sr. Juez:
-
-[NOMBRE ABOGADO en NEGRITA], abogado, T° 97 F° 16 C.P.A.C.F, [en representación de / POR DERECHO PROPIO], manteniendo el domicilio procesal en la Av. Ricardo Balbín 2368, CABA (zona de notificación 204, e-mail: matiasgarciacliment@gmail.com, tel: 4-545-2488) y domicilio electrónico en 20313806198, en los autos caratulados: "[CARATULA en NEGRITA]" [NUMERO en NEGRITA], a VS digo:
-
-Hallándose vencido el plazo [de fecha XX/XX/XXXX o "previsto en la sentencia de autos"] sin que obre en el sistema Lex 100 depósito alguno [—CONTEXTO ADICIONAL SI CORRESPONDE—], solicito a VS que ordene trabar embargo, vía Deox, por la suma de [MONTO en NEGRITA] ([MONTO EN LETRAS]), más lo que VS presupueste para responder a intereses y costas de la ejecución, sobre los fondos que [DEMANDADA Y CUIT en NEGRITA], posea al momento de la traba del presente o adquiera en el futuro en el [BANCO en NEGRITA], en cualquier cuenta corriente y/o caja de ahorros, fondo de inversión, plazo fijo u otra cuenta.
+Hallándose vencido el plazo… solicito a VS que ordene trabar embargo, vía Deox,
+por la suma de [MONTO NEGRITA] ([MONTO EN LETRAS])…  ← párrafo justificado, sangría 1.25cm
 
 [PÁRRAFO DE RESERVA DE ACTUALIZACIÓN SI CORRESPONDE]
 
 Solicito a VS que haga saber a la oficiada que:
 
-[1º) en NEGRITA] Se deberán embargar la cantidad de cuentas necesarias para hacer efectiva la medida
+1º) Se deberán embargar la cantidad de cuentas necesarias…    ← items: justificado, sin sangría, número en negrita
+2º) Se deberá trabar y MANTENER el embargo…
+3º) Los fondos embargados deberán ser remitidos y depositados en el Banco Ciudad…
 
-[2º) en NEGRITA] Se deberá trabar y [MANTENER en NEGRITA] el embargo hasta el momento en que se retengan el 100% de los fondos
-
-[3º) en NEGRITA] Los fondos embargados, deberán ser remitidos y depositados en el Banco Ciudad, dentro de los 5 días de su indisponibilidad, en una cuenta a nombre de V.S. y como perteneciente a estos actuados
-
-[7 TABS] Proveer de conformidad,
-[6 TABS + espacios] SERÁ JUSTICIA [en NEGRITA]
+Proveer de conformidad,                                     ← centrado
+SERÁ JUSTICIA                                               ← centrado, negrita
 ```
 
-### Reglas de formato detalladas:
-- **Título**: negrita + subrayado (underline=True)
-- **Nombre del abogado**: negrita
-- **Nombre del actor/cliente**: negrita (si es en representación)
-- **"POR DERECHO PROPIO"**: negrita (si es por honorarios propios)
-- **Carátula y número de expediente**: negrita
-- **Monto**: negrita
-- **Nombre y CUIT de la demandada**: negrita
-- **Nombre del banco**: negrita
-- **Números de items (1º, 2º, 3º)**: negrita
-- **"MANTENER"**: negrita
-- **"SERÁ JUSTICIA"**: negrita
-- **Cierre**: con tabs (7 tabs para "Proveer de conformidad", 6 tabs + espacios para "SERÁ JUSTICIA"), NO usar alineación derecha — usar tabs como en el modelo
-
-### Código Python para generar el DOCX:
-
-```python
-from docx import Document
-from docx.shared import Pt, Cm, Emu
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-doc = Document()
-
-for section in doc.sections:
-    section.top_margin = Cm(2)
-    section.bottom_margin = Cm(2)
-    section.left_margin = Cm(3)
-    section.right_margin = Cm(2)
-
-style = doc.styles['Normal']
-font = style.font
-font.name = 'Arial'
-font.size = Pt(12)
-
-def add_run(p, text, bold=None, underline=None):
-    r = p.add_run(text)
-    r.font.name = 'Arial'
-    if bold: r.bold = True
-    if underline: r.underline = True
-    return r
-
-def make_para(alignment=WD_ALIGN_PARAGRAPH.JUSTIFY, ls=1.5, sa=Emu(63500)):
-    p = doc.add_paragraph()
-    p.alignment = alignment
-    p.paragraph_format.line_spacing = ls
-    p.paragraph_format.space_after = sa
-    return p
-```
+### Reglas de formato puntuales:
+- **Nombre del actor/cliente**, **POR DERECHO PROPIO**, **monto**, **CUIT**,
+  **nombre del banco**, **números de items**, **MANTENER**: en negrita (con
+  `add_run` + `bold=True` dentro del párrafo).
+- **Cierre**: usar párrafos centrados (`alignment = CENTER`), NO usar tabs ni
+  alineación derecha.
 
 ### Paso 5: Guardar el DOCX
 - Guardar en la carpeta del caso en OneDrive si se identifica

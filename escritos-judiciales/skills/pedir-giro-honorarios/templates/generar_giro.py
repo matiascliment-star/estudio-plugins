@@ -9,23 +9,36 @@ USO:
 
 REQUISITOS:
   - Las imágenes embebidas se toman de:
-      ~/.claude/skills/pedir-giro-honorarios/assets/constancia_afip.png
-      ~/.claude/skills/pedir-giro-honorarios/assets/constancia_cbu.png
+      ~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/skills/pedir-giro-honorarios/assets/constancia_afip.png
+      ~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/skills/pedir-giro-honorarios/assets/constancia_cbu.png
 
-CONVENCIÓN FORMATO (feedback_formato_escritos.md):
-  - Times New Roman 12pt, interlineado 1.5
-  - Márgenes: sup 2 / inf 2 / izq 3 / der 2 cm
-  - Título principal justificado, negrita + subrayado, sin sangría
-  - Sr. Juez: izquierda, negrita, sin sangría
-  - 1er párrafo: sangría 1.5 cm
-  - Secciones: sangría 1.25 cm, negrita + subrayado, una línea en blanco antes
-  - Cuerpo: justificado, sangría 1.25 cm
+FORMATO:
+  Importa todos los builders desde el helper canónico
+  (escritos-judiciales/scripts/formato_escrito.py).
+  NO duplica formato — eso garantiza consistencia con el resto de los skills.
 """
 
-from docx import Document
-from docx.shared import Pt, Cm, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 import os
+import sys
+
+# Importar el helper canónico
+HELPER_DIR = os.path.expanduser(
+    '~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts'
+)
+sys.path.insert(0, HELPER_DIR)
+
+from formato_escrito import (  # noqa: E402
+    nuevo_documento,
+    titulo_principal,
+    encabezado_tribunal,
+    titulo_seccion,
+    parrafo,
+    FUENTE,
+    TAMANO_PT,
+    SANGRIA_LETRADO_CM,
+)
+from docx.shared import Pt, Cm, Inches  # noqa: E402
+from docx.enum.text import WD_ALIGN_PARAGRAPH  # noqa: E402
 
 # ======================================================================
 # DATOS DEL CASO — EDITAR
@@ -40,21 +53,19 @@ CASO = {
     'variante': 'A',
 
     # Montos
-    'honorarios': '1.000.000,00',  # capital sin IVA
-    'iva': '210.000,00',            # 21%
-    'monto_total': '1.210.000,00',  # honorarios + IVA
+    'honorarios': '1.000.000,00',
+    'iva': '210.000,00',
+    'monto_total': '1.210.000,00',
 
-    # Fechas de depósitos (formato DD/MM/YYYY)
-    # Variante A: usar FECHA_DEPOSITO y FECHA_EMBARGO (del proveído que ordenó embargo sobre la cuenta)
-    # Variante B: usar FECHAS_DEPOSITOS (texto libre, ej: "07/11/2025 y 11/04/2026")
+    # Fechas de depósitos
     'fecha_deposito': '23/10/2022',
     'fecha_embargo': '12/03/2026',
     'fechas_depositos': '07/11/2025 y 11/04/2026',
 
-    # Contexto para variante B (recurso pendiente)
+    # Contexto para variante B
     'recurso_pendiente': 'queja ante la CSJN',
 
-    # Datos fijos del suscripto (no tocar salvo que cambien)
+    # Datos fijos del suscripto
     'letrado_nombre': 'MATÍAS CHRISTIAN GARCÍA CLIMENT',
     'letrado_tomo_folio': 'T° 97 F° 16 del C.P.A.C.F.',
     'letrado_cuit': '20-31380619-8',
@@ -69,92 +80,61 @@ CASO = {
     'cbu': '0290026110000003567389',
 }
 
-ASSETS_DIR = os.path.expanduser('~/.claude/skills/pedir-giro-honorarios/assets')
+ASSETS_DIR = os.path.expanduser(
+    '~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/skills/pedir-giro-honorarios/assets'
+)
 
 # ======================================================================
-# CONSTRUCTOR DE DOCUMENTO
+# HELPERS LOCALES (sólo lo que el módulo canónico no cubre)
 # ======================================================================
-doc = Document()
-for s in doc.sections:
-    s.top_margin = Cm(2); s.bottom_margin = Cm(2)
-    s.left_margin = Cm(3); s.right_margin = Cm(2)
 
-st = doc.styles['Normal']
-st.font.name = 'Times New Roman'; st.font.size = Pt(12)
-pf = st.paragraph_format
-pf.line_spacing = 1.5
-pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-pf.first_line_indent = Cm(1.25)
-
-
-def _run(p, t, bold=False, underline=False):
-    r = p.add_run(t)
-    r.font.name = 'Times New Roman'; r.font.size = Pt(12)
-    r.bold = bold; r.underline = underline
-    return r
-
-
-def add_titulo(t):
+def parrafo_mixto(doc, segs, indent_cm=1.25):
+    """
+    Párrafo justificado con runs mixtos (negritas/subrayados parciales).
+    Cada seg es (texto, bold) o (texto, bold, underline).
+    """
     p = doc.add_paragraph()
-    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p.paragraph_format.first_line_indent = Cm(0)
-    p.paragraph_format.line_spacing = 1.5
-    _run(p, t, bold=True, underline=True)
-
-
-def add_encabezado(t):
-    p = doc.add_paragraph()
-    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    p.paragraph_format.first_line_indent = Cm(0)
-    p.paragraph_format.line_spacing = 1.5
-    _run(p, t, bold=True)
-
-
-def add_seccion(t):
-    doc.add_paragraph()  # linea en blanco
-    p = doc.add_paragraph()
-    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p.paragraph_format.first_line_indent = Cm(1.25)
-    p.paragraph_format.line_spacing = 1.5
-    _run(p, t, bold=True, underline=True)
-
-
-def add_par(t, indent=1.25, bold=False, align='justify'):
-    p = doc.add_paragraph()
-    p.paragraph_format.alignment = {'justify': WD_ALIGN_PARAGRAPH.JUSTIFY, 'center': WD_ALIGN_PARAGRAPH.CENTER, 'left': WD_ALIGN_PARAGRAPH.LEFT}[align]
-    p.paragraph_format.first_line_indent = Cm(indent) if indent else Cm(0)
-    p.paragraph_format.line_spacing = 1.5
-    _run(p, t, bold=bold)
-
-
-def add_par_mixto(segs, indent=1.25):
-    p = doc.add_paragraph()
-    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p.paragraph_format.first_line_indent = Cm(indent)
-    p.paragraph_format.line_spacing = 1.5
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p.paragraph_format.first_line_indent = Cm(indent_cm)
     for seg in segs:
         if len(seg) == 3:
             t, b, u = seg
         else:
             t, b = seg; u = False
-        _run(p, t, bold=b, underline=u)
+        r = p.add_run(t)
+        r.font.name = FUENTE
+        r.font.size = Pt(TAMANO_PT)
+        r.bold = b
+        r.underline = u
+    return p
 
 
-def add_constancia(titulo, imagen, width_inches):
-    doc.add_page_break()
+def parrafo_centrado(doc, texto, bold=False):
     p = doc.add_paragraph()
-    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.first_line_indent = Cm(0)
-    r = p.add_run(titulo); r.font.name = 'Times New Roman'; r.font.size = Pt(12); r.bold = True
+    r = p.add_run(texto)
+    r.font.name = FUENTE
+    r.font.size = Pt(TAMANO_PT)
+    r.bold = bold
+    return p
+
+
+def constancia(doc, titulo, imagen, width_inches):
+    doc.add_page_break()
+    parrafo_centrado(doc, titulo, bold=True)
     p = doc.add_paragraph()
-    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.first_line_indent = Cm(0)
     p.add_run().add_picture(imagen, width=Inches(width_inches))
 
 
 # ======================================================================
-# TÍTULO
+# CONSTRUIR EL ESCRITO
 # ======================================================================
+doc = nuevo_documento()
+
+# --- TÍTULO PRINCIPAL ----------------------------------------------------
 if CASO['variante'] == 'B':
     titulo = ('TRABA EMBARGO SOBRE FONDOS DEPOSITADOS. SE LIBRE GIRO ELECTRÓNICO '
               'EN CONCEPTO DE HONORARIOS. ADJUNTA DOCUMENTACIÓN. DECLARA BAJO '
@@ -162,151 +142,129 @@ if CASO['variante'] == 'B':
 else:
     titulo = ('SE LIBRE GIRO ELECTRÓNICO EN CONCEPTO DE HONORARIOS. ADJUNTA '
               'DOCUMENTACIÓN. DECLARA BAJO JURAMENTO. HACE RESERVA.-')
-add_titulo(titulo)
+titulo_principal(doc, titulo)
 doc.add_paragraph()
 doc.add_paragraph()
 
-# ======================================================================
-# ENCABEZADO
-# ======================================================================
-add_encabezado('Sr. Juez:')
+# --- ENCABEZADO ---------------------------------------------------------
+encabezado_tribunal(doc, "Sr. Juez:")
 
-# ======================================================================
-# PRIMER PÁRRAFO
-# ======================================================================
-add_par_mixto([
-    ('', False, False),
-    (CASO['letrado_nombre'], True, False),
+# --- PRIMER PÁRRAFO (LETRADO) -------------------------------------------
+parrafo_mixto(doc, [
+    (CASO['letrado_nombre'], True),
     (f', abogado, inscripto en el {CASO["letrado_tomo_folio"]}, C.U.I.T N° {CASO["letrado_cuit"]}, '
-     f'IVA responsable inscripto, ', False, False),
-    ('POR DERECHO PROPIO', True, False),
+     f'IVA responsable inscripto, ', False),
+    ('POR DERECHO PROPIO', True),
     (f', manteniendo el domicilio procesal en la {CASO["letrado_domicilio"]} (zona de notificación '
      f'{CASO["letrado_zona"]}, e-mail: {CASO["letrado_email"]}, tel: {CASO["letrado_tel"]}) y '
-     f'domicilio electrónico en {CASO["letrado_de"]}, en los autos caratulados ', False, False),
-    (f'"{CASO["caratula"]}" Expte. N° {CASO["numero_expte"]}', True, False),
-    (', a V.S. digo:', False, False),
-], indent=1.5)
+     f'domicilio electrónico en {CASO["letrado_de"]}, en los autos caratulados ', False),
+    (f'"{CASO["caratula"]}" Expte. N° {CASO["numero_expte"]}', True),
+    (', a V.S. digo:', False),
+], indent_cm=SANGRIA_LETRADO_CM)
 
-# ======================================================================
-# I.- (depende de variante)
-# ======================================================================
+# --- I. (depende de variante) -------------------------------------------
 if CASO['variante'] == 'B':
-    add_seccion('I.- TRABA EMBARGO SOBRE FONDOS DEPOSITADOS. SE LIBRE GIRO ELECTRÓNICO.-')
-    add_par_mixto([
-        ('', False, False),
-        ('VISTO', True, False),
+    titulo_seccion(doc, 'I.- TRABA EMBARGO SOBRE FONDOS DEPOSITADOS. SE LIBRE GIRO ELECTRÓNICO.-')
+    parrafo_mixto(doc, [
+        ('VISTO', True),
         (f' los depósitos efectuados por la demandada en fechas {CASO["fechas_depositos"]}, '
          f'que totalizan la suma de ${CASO["monto_total"]} (honorarios ${CASO["honorarios"]} + '
          f'IVA ${CASO["iva"]}) en la cuenta de autos —los que se encuentran dados en embargo '
          f'por la propia demandada con pretensión de inmovilización en plazo fijo hasta la '
          f'resolución de la {CASO["recurso_pendiente"]}—, y atento a que dicho trámite no '
          'suspende la ejecución ni la exigibilidad de los honorarios firmes (art. 285 CPCCN), ',
-         False, False),
-        ('SOLICITO', True, False),
-        (' a V.S. que:', False, False),
+         False),
+        ('SOLICITO', True),
+        (' a V.S. que:', False),
     ])
-    add_par(
+    parrafo(doc,
         f'(a) Se TRABE EMBARGO a favor del suscripto, {CASO["letrado_nombre"]}, CUIT '
         f'{CASO["letrado_cuit"]}, sobre las sumas depositadas en la cuenta de autos por la '
         f'parte demandada, hasta cubrir la totalidad de ${CASO["monto_total"]} en concepto de '
         'honorarios profesionales, con más lo que corresponda por diferencias pendientes '
         'conforme las reservas oportunamente formuladas.'
     )
-    add_par_mixto([
-        ('(b) Se ', False, False),
-        ('ORDENE TRANSFERIR', True, False),
-        (' la suma de ', False, False),
-        (f'${CASO["monto_total"]}', True, False),
-        (' desde la cuenta de autos a la cuenta bancaria del suscripto, ', False, False),
-        (CASO['letrado_nombre'], True, False),
+    parrafo_mixto(doc, [
+        ('(b) Se ', False),
+        ('ORDENE TRANSFERIR', True),
+        (' la suma de ', False),
+        (f'${CASO["monto_total"]}', True),
+        (' desde la cuenta de autos a la cuenta bancaria del suscripto, ', False),
+        (CASO['letrado_nombre'], True),
         (f', DNI {CASO["letrado_dni"]}, CUIT {CASO["letrado_cuit"]}, abierta en el '
          f'{CASO["banco"]}, Caja de Ahorro $ N° {CASO["caja_ahorro"]}, CBU {CASO["cbu"]}, '
-         'bajo estricta responsabilidad del profesional firmante.', False, False),
+         'bajo estricta responsabilidad del profesional firmante.', False),
     ])
 else:
-    add_seccion('I.- SE ORDENE TRANSFERENCIA.-')
-    add_par_mixto([
-        ('', False, False),
-        ('VISTO', True, False),
+    titulo_seccion(doc, 'I.- SE ORDENE TRANSFERENCIA.-')
+    parrafo_mixto(doc, [
+        ('VISTO', True),
         (f' el depósito efectuado por la demandada en fecha {CASO["fecha_deposito"]} y el '
          f'embargo ordenado sobre la cuenta de autos en fecha {CASO["fecha_embargo"]}, ',
-         False, False),
-        ('SOLICITO', True, False),
-        (' a S.S. que ', False, False),
-        ('ORDENE TRANSFERIR', True, False),
-        (' la suma de ', False, False),
-        (f'${CASO["monto_total"]}', True, False),
-        (' (honorarios ', False, False),
-        (f'${CASO["honorarios"]}', True, False),
-        (' + IVA ', False, False),
-        (f'${CASO["iva"]}', True, False),
-        (') desde la cuenta de autos a la cuenta bancaria del suscripto, ', False, False),
-        (CASO['letrado_nombre'], True, False),
+         False),
+        ('SOLICITO', True),
+        (' a S.S. que ', False),
+        ('ORDENE TRANSFERIR', True),
+        (' la suma de ', False),
+        (f'${CASO["monto_total"]}', True),
+        (' (honorarios ', False),
+        (f'${CASO["honorarios"]}', True),
+        (' + IVA ', False),
+        (f'${CASO["iva"]}', True),
+        (') desde la cuenta de autos a la cuenta bancaria del suscripto, ', False),
+        (CASO['letrado_nombre'], True),
         (f', DNI {CASO["letrado_dni"]}, CUIT {CASO["letrado_cuit"]}, abierta en el '
          f'{CASO["banco"]}, Caja de Ahorro $ {CASO["caja_ahorro"]}, CBU {CASO["cbu"]}.',
-         False, False),
+         False),
     ])
 
-# ======================================================================
-# II.- ADJUNTA DOCUMENTACIÓN - DECLARA BAJO JURAMENTO
-# ======================================================================
-add_seccion('II.- ADJUNTA DOCUMENTACIÓN. DECLARA BAJO JURAMENTO.-')
-add_par(
+# --- II. ADJUNTA DOCUMENTACIÓN ------------------------------------------
+titulo_seccion(doc, 'II.- ADJUNTA DOCUMENTACIÓN. DECLARA BAJO JURAMENTO.-')
+parrafo(doc,
     'Adjunto constancia de inscripción y constancia de CBU de la cuenta bancaria del '
     'suscripto y declaro bajo juramento que ambas piezas son auténticas.'
 )
 
-# ======================================================================
-# III.- PRESTA JURAMENTO
-# ======================================================================
-add_seccion('III.- PRESTA JURAMENTO.-')
-add_par('Presto juramento de haber sido el único letrado actuante en los presentes autos.')
+# --- III. PRESTA JURAMENTO ----------------------------------------------
+titulo_seccion(doc, 'III.- PRESTA JURAMENTO.-')
+parrafo(doc, 'Presto juramento de haber sido el único letrado actuante en los presentes autos.')
 
-# ======================================================================
-# IV.- HACE RESERVA
-# ======================================================================
-add_seccion('IV.- HACE RESERVA.-')
-add_par(
+# --- IV. HACE RESERVA ---------------------------------------------------
+titulo_seccion(doc, 'IV.- HACE RESERVA.-')
+parrafo(doc,
     'Esta parte se reserva el derecho a reclamar los intereses devengados por la falta de '
     'pago en término, dejando expresa constancia que las sumas recibidas se imputarán en '
     'primer lugar a intereses y en segundo lugar a honorarios. En efecto, en los términos '
     'del artículo 900 del CCCN se deja constancia que el suscripto no presta su consentimiento '
     'a que la suma percibida se impute, en primer término, a la deuda principal de honorarios.'
 )
-add_par(
+parrafo(doc,
     'Asimismo, esta parte se reserva el derecho a reclamar la diferencia de honorarios que '
     'surja de aplicar lo dispuesto en el artículo 51 de la Ley 27.423 que dice:'
 )
-add_par_mixto([
-    ('', False, False),
+parrafo_mixto(doc, [
     ('"La regulación de honorarios deberá contener, bajo pena de nulidad, el monto expresado '
      'en moneda de curso legal y la cantidad de UMA que éste representa a la fecha de la '
      'resolución. El pago será definitivo y cancelatorio únicamente si se abona la cantidad '
      'de moneda de curso legal que resulte equivalente a la cantidad de UMA contenidas en la '
-     'resolución regulatoria, ', False, False),
+     'resolución regulatoria, ', False),
     ('según su valor vigente al momento del pago', False, True),
-    ('".', False, False),
+    ('".', False),
 ])
-add_par('Solicito se tenga presente lo manifestado.')
+parrafo(doc, 'Solicito se tenga presente lo manifestado.')
 
-# ======================================================================
-# CIERRE
-# ======================================================================
+# --- CIERRE -------------------------------------------------------------
 doc.add_paragraph()
-add_par('Proveer de conformidad,', indent=0, align='center')
-add_par('SERÁ JUSTICIA.-', indent=0, align='center', bold=True)
+parrafo_centrado(doc, 'Proveer de conformidad,')
+parrafo_centrado(doc, 'SERÁ JUSTICIA.-', bold=True)
 
-# ======================================================================
-# ANEXOS (constancias embebidas)
-# ======================================================================
-add_constancia('CONSTANCIA DE INSCRIPCIÓN AFIP/ARCA',
-               os.path.join(ASSETS_DIR, 'constancia_afip.png'), 6)
-add_constancia('CONSTANCIA DE CBU - BANCO CIUDAD',
-               os.path.join(ASSETS_DIR, 'constancia_cbu.png'), 5)
+# --- ANEXOS -------------------------------------------------------------
+constancia(doc, 'CONSTANCIA DE INSCRIPCIÓN AFIP/ARCA',
+           os.path.join(ASSETS_DIR, 'constancia_afip.png'), 6)
+constancia(doc, 'CONSTANCIA DE CBU - BANCO CIUDAD',
+           os.path.join(ASSETS_DIR, 'constancia_cbu.png'), 5)
 
-# ======================================================================
-# GUARDAR
-# ======================================================================
+# --- GUARDAR ------------------------------------------------------------
 out = os.path.expanduser(f'~/Desktop/{CASO["caratula_short"]}_giro_honorarios.docx')
 doc.save(out)
 print(f'Guardado: {out}')

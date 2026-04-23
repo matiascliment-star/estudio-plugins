@@ -140,7 +140,16 @@ Pérdida %    = (1 - BNA_total / IPC_total) × 100
 
 Seguir la estructura fija del modelo en `references/modelo-velazquez-ampliacion-barrios.md`:
 
-**Título**: `AMPLÍA FUNDAMENTOS SOBRE INCONSTITUCIONALIDAD DEL ART. 7° LEY 23.928 (t.o. art. 4° LEY 25.561)` — centrado, bold, subrayado.
+**Título**: `AMPLÍA FUNDAMENTOS SOBRE INCONSTITUCIONALIDAD DEL ART. 7° LEY 23.928 (t.o. art. 4° LEY 25.561)` — **JUSTIFICADO**, bold, subrayado (no centrado: la spec del estudio en `escritos-judiciales/references/formato-escrito.md` manda título justificado).
+
+**Formato HTML general**: respetar la spec canónica
+(`escritos-judiciales/references/formato-escrito.md`):
+- `body{font-family:"Times New Roman",serif;font-size:12pt;line-height:1.5;}`
+- Cuerpo: `p{text-align:justify;text-indent:1.25cm;margin:0;}`
+- Título: `<p style="text-align:justify;"><strong><u>...</u></strong></p>` (sin sangría)
+- Encabezado tribunal: `<p style="text-align:left;">...</p>` (sin sangría)
+- Títulos de sección: `<p style="text-align:justify;text-indent:1.25cm;margin-top:12pt;"><strong><u>I. ...</u></strong></p>`
+- Items petitorio: `<p style="text-align:justify;">1. ...</p>` (sin sangría)
 
 **Apartados (orden obligatorio)**:
 - I. OBJETO

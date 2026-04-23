@@ -10,103 +10,78 @@ Uso:
     --placeholders '{"fecha_ultimo_hito":"07/07/2025","descripcion_ultimo_hito":"el Juzgado intimó al perito por remiso","estado_procesal":"paralizado en etapa probatoria","accion_especifica_a_pedir":"haga efectivo el apercibimiento al perito contador"}' \
     --output /tmp/pronto_VALLEJOS.docx
 
-Aplica el formato del estudio (memoria feedback_formato_escritos.md):
-- Times New Roman 12pt, interlineado 1.5, márgenes 2/2/3/2 cm
-- Sangría 1.25 cm (1.5 para encabezado letrado)
-- OBJETO: negrita + subrayado + MAYÚSCULAS + sangría 1.25
-- "Sr. Juez:" izquierda sin sangría
-- Nombre del letrado en negrita, carátula y expediente en negrita
+Aplica el FORMATO CANÓNICO importando desde
+escritos-judiciales/scripts/formato_escrito.py.
+
+NO duplica formato — los parámetros (fuente, sangrías, márgenes) viven todos
+en el módulo canónico para que cambien en un solo lugar.
 """
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
-from docx import Document
-from docx.shared import Pt, Cm, Emu
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# Formato del estudio
-FUENTE = "Times New Roman"
-TAM_PT = 12
-INTERLINEADO = 1.5
-MARGEN_SUP = MARGEN_INF = MARGEN_DER = Cm(2)
-MARGEN_IZQ = Cm(3)
-SANGRIA_CUERPO = Emu(450215)  # ~1.25 cm
-SANGRIA_LETRADO = Emu(540385)  # ~1.5 cm
+# Importar el helper canónico
+HELPER_DIR = os.path.expanduser(
+    '~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts'
+)
+sys.path.insert(0, HELPER_DIR)
 
-
-def aplicar_formato_doc(doc):
-    """Aplica márgenes y formato base al documento."""
-    for section in doc.sections:
-        section.top_margin = MARGEN_SUP
-        section.bottom_margin = MARGEN_INF
-        section.left_margin = MARGEN_IZQ
-        section.right_margin = MARGEN_DER
+from formato_escrito import (  # noqa: E402
+    nuevo_documento,
+    titulo_principal,
+    encabezado_tribunal,
+    FUENTE,
+    TAMANO_PT,
+    SANGRIA_CUERPO_CM,
+    SANGRIA_LETRADO_CM,
+    LINEA_BLANCO_ANTES_SECCION_PT,
+)
+from docx.shared import Pt, Cm  # noqa: E402
+from docx.enum.text import WD_ALIGN_PARAGRAPH  # noqa: E402
 
 
-def set_style(run, negrita=False, subrayado=False):
+def _set_style(run, negrita=False, subrayado=False):
     run.font.name = FUENTE
-    run.font.size = Pt(TAM_PT)
+    run.font.size = Pt(TAMANO_PT)
     run.bold = negrita
     run.underline = subrayado
 
 
-def agregar_parrafo(doc, texto, *, alineacion=WD_ALIGN_PARAGRAPH.JUSTIFY,
-                    sangria=None, negrita=False, subrayado=False,
-                    mayusculas=False, interlineado=INTERLINEADO,
-                    space_before=0, space_after=0, bloques_negrita=None):
+def _parrafo_con_negritas_parciales(doc, texto, *, sangria_cm=SANGRIA_CUERPO_CM,
+                                    bloques_negrita=None, space_before=0,
+                                    negrita=False):
     """
-    Agrega un párrafo con formato. Si `bloques_negrita` es una lista de
-    substrings, esos tramos van en negrita (el resto normal).
+    Párrafo justificado, fuente canónica, con tramos opcionales en negrita.
     """
     p = doc.add_paragraph()
-    p.alignment = alineacion
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     pf = p.paragraph_format
-    pf.line_spacing = interlineado
-    pf.space_before = Pt(space_before)
-    pf.space_after = Pt(space_after)
-    if sangria is not None:
-        pf.first_line_indent = sangria
-
-    if mayusculas:
-        texto = texto.upper()
+    pf.line_spacing = 1.5
+    pf.first_line_indent = Cm(sangria_cm) if sangria_cm else Cm(0)
+    if space_before:
+        pf.space_before = Pt(space_before)
 
     if bloques_negrita:
-        # partir texto en tramos alternando normal/negrita
         pattern = "|".join(re.escape(b) for b in bloques_negrita)
         partes = re.split(f"({pattern})", texto)
         for parte in partes:
             if not parte:
                 continue
-            run = p.add_run(parte)
             es_negrita = parte in bloques_negrita or negrita
-            set_style(run, negrita=es_negrita, subrayado=subrayado)
+            _set_style(p.add_run(parte), negrita=es_negrita)
     else:
-        run = p.add_run(texto)
-        set_style(run, negrita=negrita, subrayado=subrayado)
+        _set_style(p.add_run(texto), negrita=negrita)
     return p
 
 
 def parsear_modelo(texto_modelo):
-    """Parsea el .md del modelo y devuelve bloques lógicos."""
-    # Los modelos tienen:
-    # OBJETO: ...
-    # (línea en blanco)
-    # Sr. Juez:
-    # (línea en blanco)
-    # Primer párrafo (encabezado letrado)
-    # (línea en blanco)
-    # Cuerpo párrafos...
-    # (línea en blanco)
-    # Proveer de conformidad,
-    # (línea en blanco)
-    # SERÁ JUSTICIA.
+    """Devuelve la lista de bloques (separados por línea en blanco)."""
     lineas = [l.rstrip() for l in texto_modelo.strip().split("\n")]
-    # Agrupar en bloques separados por línea vacía
-    bloques = []
-    actual = []
+    bloques, actual = [], []
     for l in lineas:
         if l.strip() == "":
             if actual:
@@ -122,7 +97,6 @@ def parsear_modelo(texto_modelo):
 def reemplazar_placeholders(texto, placeholders):
     for k, v in placeholders.items():
         texto = texto.replace("{{" + k + "}}", str(v))
-    # Detectar placeholders sin reemplazar (señal de error)
     sin_cubrir = re.findall(r"\{\{(\w+)\}\}", texto)
     if sin_cubrir:
         print(f"⚠️  Placeholders sin valor: {sin_cubrir}", file=sys.stderr)
@@ -131,54 +105,57 @@ def reemplazar_placeholders(texto, placeholders):
 
 def generar(modelo_path, caratula, numero, placeholders, output_path):
     texto_modelo = Path(modelo_path).read_text(encoding="utf-8")
-
-    # Sumar caratula y numero a los placeholders
     placeholders = {**placeholders, "caratula": caratula, "numero": numero}
     texto = reemplazar_placeholders(texto_modelo, placeholders)
-
     bloques = parsear_modelo(texto)
 
-    doc = Document()
-    aplicar_formato_doc(doc)
+    doc = nuevo_documento()
 
     for i, bloque in enumerate(bloques):
-        # Primer bloque: OBJETO
-        if i == 0 and bloque.upper().startswith("OBJETO"):
-            agregar_parrafo(doc, bloque, sangria=SANGRIA_CUERPO,
-                            negrita=True, subrayado=True, mayusculas=True,
-                            space_after=6)
+        # Bloque 0 — TÍTULO PRINCIPAL (justificado, negrita+subrayado, sin sangría)
+        if i == 0:
+            titulo_principal(doc, bloque)
             continue
 
-        # Encabezado al tribunal (ej "Sr. Juez:", "Excmo. Tribunal:")
+        # Encabezado al tribunal corto ("Sr. Juez:", "Excmo. Tribunal:")
         if bloque.endswith(":") and len(bloque) < 50 and "\n" not in bloque:
-            agregar_parrafo(doc, bloque, alineacion=WD_ALIGN_PARAGRAPH.LEFT,
-                            space_before=6, space_after=6)
+            encabezado_tribunal(doc, bloque)
             continue
 
-        # Cierre "SERÁ JUSTICIA."
+        # Cierre "SERÁ JUSTICIA"
         if "JUSTICIA" in bloque.upper() and len(bloque) < 40:
-            agregar_parrafo(doc, bloque, sangria=SANGRIA_CUERPO,
-                            negrita=True, space_before=12)
+            _parrafo_con_negritas_parciales(
+                doc, bloque, negrita=True,
+                space_before=LINEA_BLANCO_ANTES_SECCION_PT,
+            )
             continue
 
         # "Proveer de conformidad,"
         if bloque.lower().startswith("proveer") or bloque.lower().startswith("provea"):
-            agregar_parrafo(doc, bloque, sangria=SANGRIA_CUERPO, space_before=6)
+            _parrafo_con_negritas_parciales(
+                doc, bloque, space_before=LINEA_BLANCO_ANTES_SECCION_PT,
+            )
             continue
 
-        # Primer párrafo con datos del letrado (único con "GARCÍA CLIMENT" como actor)
+        # Primer párrafo con datos del letrado (sangría 1.5 cm)
         if "GARCÍA CLIMENT" in bloque and "T°" in bloque:
             bloques_negrita = re.findall(r"\*\*(.+?)\*\*", bloque, flags=re.DOTALL)
             texto_limpio = re.sub(r"\*\*(.+?)\*\*", r"\1", bloque, flags=re.DOTALL)
-            agregar_parrafo(doc, texto_limpio, sangria=SANGRIA_LETRADO,
-                            bloques_negrita=bloques_negrita, space_after=6)
+            _parrafo_con_negritas_parciales(
+                doc, texto_limpio,
+                sangria_cm=SANGRIA_LETRADO_CM,
+                bloques_negrita=bloques_negrita,
+            )
             continue
 
-        # Cuerpo normal
+        # Cuerpo normal (sangría 1.25 cm)
         bloques_negrita = re.findall(r"\*\*(.+?)\*\*", bloque, flags=re.DOTALL)
         texto_limpio = re.sub(r"\*\*(.+?)\*\*", r"\1", bloque, flags=re.DOTALL)
-        agregar_parrafo(doc, texto_limpio, sangria=SANGRIA_CUERPO,
-                        bloques_negrita=bloques_negrita, space_after=6)
+        _parrafo_con_negritas_parciales(
+            doc, texto_limpio,
+            sangria_cm=SANGRIA_CUERPO_CM,
+            bloques_negrita=bloques_negrita,
+        )
 
     doc.save(output_path)
     print(f"✅ Guardado: {output_path}")

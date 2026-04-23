@@ -138,7 +138,15 @@ El total que devuelve (`total_liquidacion`) se contrasta con el piso para demost
 
 Seguir la estructura fija del modelo en `references/modelo-lopez.html`. Apartados obligatorios:
 
-- **Título**: `SOLICITA SUBSIDIARIAMENTE APLICACIÓN DEL PISO MÍNIMO INDEROGABLE DEL ART. 55 INC. C) DE LA LEY 27.802 (LEY DE MODERNIZACIÓN LABORAL). DEJA A SALVO POSICIÓN Y PLANTEA INCONSTITUCIONALIDAD DEL RECORTE DEL 33%. RESERVA CASO FEDERAL.` — centrado, bold, subrayado.
+- **Título**: `SOLICITA SUBSIDIARIAMENTE APLICACIÓN DEL PISO MÍNIMO INDEROGABLE DEL ART. 55 INC. C) DE LA LEY 27.802 (LEY DE MODERNIZACIÓN LABORAL). DEJA A SALVO POSICIÓN Y PLANTEA INCONSTITUCIONALIDAD DEL RECORTE DEL 33%. RESERVA CASO FEDERAL.` — **JUSTIFICADO**, bold, subrayado (no centrado: spec del estudio en `escritos-judiciales/references/formato-escrito.md` manda título justificado).
+
+**Formato HTML general**: respetar la spec canónica:
+- `body{font-family:"Times New Roman",serif;font-size:12pt;line-height:1.5;}`
+- Cuerpo: `p{text-align:justify;text-indent:1.25cm;margin:0;}`
+- Título: `<p style="text-align:justify;"><strong><u>...</u></strong></p>` (sin sangría)
+- Encabezado tribunal: `<p style="text-align:left;">...</p>`
+- Títulos de sección: `<p style="text-align:justify;text-indent:1.25cm;margin-top:12pt;"><strong><u>I. ...</u></strong></p>`
+- Items petitorio: `<p style="text-align:justify;">1. ...</p>` (sin sangría)
 - I. OBJETO (subsidiario, deja a salvo, plantea inconstitucionalidad 33%, reserva caso federal)
 - II. EL SISTEMA DEL ART. 55 DE LA LEY 27.802 (incluir cita textual del último párrafo: orden público, de oficio o a petición de parte)
 - III. EL LEGISLADOR YA PREVIÓ UN PISO MÍNIMO — ARGUMENTO DE "CONFESIÓN NORMATIVA" (argumento estrella propio del escrito)

@@ -5,7 +5,7 @@ description: Genera escrito de pedido de giro electrónico (libramiento) de hono
 
 # Skill: Pedir Giro de Honorarios
 
-Genera un escrito DOCX para pedir el libramiento de giro electrónico de honorarios profesionales ya depositados por la demandada en la cuenta de autos (causas PJN - Justicia Nacional / CABA). Sigue fielmente el modelo del estudio (ver `references/modelo-giro.md`), aplica el formato estándar de escritos (ver memoria `feedback_formato_escritos.md`) y adjunta las constancias del suscripto (AFIP y CBU) embebidas al final del escrito.
+Genera un escrito DOCX para pedir el libramiento de giro electrónico de honorarios profesionales ya depositados por la demandada en la cuenta de autos (causas PJN - Justicia Nacional / CABA). Sigue fielmente el modelo del estudio (ver `references/modelo-giro.md`), aplica el **formato canónico** (`escritos-judiciales/references/formato-escrito.md` + helper `escritos-judiciales/scripts/formato_escrito.py`) y adjunta las constancias del suscripto (AFIP y CBU) embebidas al final del escrito.
 
 ## Cuándo usar
 
@@ -62,14 +62,18 @@ El punto I.- en este caso dice primero "TRABE EMBARGO sobre las sumas depositada
 
 ## Formato
 
-Seguir estrictamente `feedback_formato_escritos.md`:
-- Times New Roman 12pt
-- Interlineado 1.5
+**FUENTE ÚNICA DE VERDAD:**
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/references/formato-escrito.md`
++ helper en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts/formato_escrito.py`.
+
+El template `templates/generar_giro.py` debe importar y usar el helper. Resumen:
+- Times New Roman 12 pt, interlineado 1.5
 - Márgenes 3/2/2/2 (izq/sup/inf/der)
-- Título principal: JUSTIFICADO, negrita + subrayado, sin sangría
+- Título principal: JUSTIFICADO, negrita+subrayado, sin sangría
 - "Sr. Juez:" a la izquierda, sin sangría
-- Primer párrafo: sangría 1.5 cm, nombre y carátula en negrita
-- Secciones I.-, II.-, III.-, IV.-: sangría 1.25 cm, negrita + subrayado, UNA LÍNEA EN BLANCO antes de cada una
+- Primer párrafo (letrado): sangría 1.5 cm, nombre y carátula en negrita
+- Secciones I.-, II.-, III.-, IV.-: sangría 1.25 cm, negrita+subrayado, una línea en blanco antes
 - Cuerpo: justificado, sangría 1.25 cm
 
 ## Estructura del escrito (4 secciones)

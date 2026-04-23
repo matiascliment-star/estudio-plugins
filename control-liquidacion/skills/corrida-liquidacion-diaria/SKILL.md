@@ -308,7 +308,12 @@ El subagente debe:
 ### Fase 4: Generación del DOCX
 
 Idéntico a caducidad: usa `scripts/generar_escrito.py` con el modelo
-correspondiente. Guarda en `/tmp/liquidacion/{fecha}/{numero_safe}_{tipo}.docx`.
+correspondiente. El script importa el formato canónico desde
+`escritos-judiciales/scripts/formato_escrito.py` (Times New Roman 12 pt,
+interlineado 1.5, márgenes 2/2/3/2, sangría 1.25 cm, título justificado
+negrita+subrayado, encabezado tribunal a la izquierda). Spec completa:
+`escritos-judiciales/references/formato-escrito.md`. Guarda en
+`/tmp/liquidacion/{fecha}/{numero_safe}_{tipo}.docx`.
 
 ### Fase 5: Distribución de borradores
 

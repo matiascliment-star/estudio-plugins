@@ -278,116 +278,68 @@ Para SCBA:
 
 ## Reglas de formato OBLIGATORIAS
 
-**CRITICO — Respetar SIEMPRE, tanto en DOCX como en HTML:**
+**FUENTE ÚNICA DE VERDAD:**
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/references/formato-escrito.md`
++ helper en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts/formato_escrito.py`.
 
-1. **Titulos de seccion SIEMPRE subrayados y en negrita** — Los titulos (I.- OBJETO, II.- ANTECEDENTES, III.- LA INCAPACIDAD DEL TRABAJADOR, etc.) SIEMPRE llevan subrayado (`<u>` en HTML, `underline=True` en DOCX) Y negrita. NUNCA generar un titulo de seccion sin subrayado.
-2. **Alineacion a la IZQUIERDA** — Todo el texto (titulos y cuerpo) alineado a la izquierda. NO usar justificado, NO usar centrado.
-3. **Fuente**: Times New Roman 12pt.
+**NO inventar formato propio. NO copiar bloques de python-docx hardcodeados.**
+
+Resumen rápido (lo único que hay que recordar):
+- Times New Roman 12 pt, interlineado 1.5
+- Cuerpo **JUSTIFICADO** (no izquierda)
+- Título principal: justificado, negrita+subrayado, sin sangría
+- Encabezado tribunal ("Sr. Juez:"): izquierda, sin sangría
+- Títulos de sección (I, II, III…): justificado, sangría 1.25 cm, negrita+subrayado, línea en blanco antes
+- Párrafo letrado de intro: sangría 1.5 cm, nombre y carátula en negrita
+- Cuerpo normal: justificado, sangría 1.25 cm
+- Items petitorio: justificado, sin sangría
+- Firma: centrada, nombre en negrita
 
 ## Formato segun jurisdiccion
 
-**Para SCBA (Provincia de Buenos Aires): SIEMPRE generar en HTML.**
-- El escrito se genera como HTML y se sube via `scba_guardar_borrador` con el HTML en `texto_html`.
-- Titulos en HTML: `<p style="text-align: left;"><strong><u>I.- OBJETO</u></strong></p>`
-- Cuerpo: `<p style="text-align: left;">[texto]</p>`
-- NUNCA generar DOCX para causas de provincia. SIEMPRE HTML.
-
-**Para PJN (CABA / Nacional): generar DOCX.**
-
-## Instrucciones para generar el DOCX (solo PJN)
-
-Generar el alegato como archivo Word (.docx) usando python-docx. Formato obligatorio:
-- **Font**: Arial 12pt
-- **Títulos**: SIEMPRE **negrita + subrayado**, alineados a la izquierda
-- **Cuerpo**: texto justificado (JUSTIFY), interlineado 1.5
-- **Márgenes**: 2cm arriba/abajo, 3cm izquierda, 2cm derecha
+**Para PJN (CABA / Nacional): generar DOCX usando el helper.**
 
 ```python
-from docx import Document
-from docx.shared import Pt, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+import sys
+sys.path.insert(0, "/Users/matiaschristiangarciacliment/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts")
 
-def crear_docx_escrito(secciones, titulo_principal, output_path):
-    """
-    secciones: lista de tuplas (titulo_seccion, texto_seccion)
-               titulo_seccion puede ser None para parrafos sin titulo
-    titulo_principal: ej "PARTE ACTORA PRESENTA ALEGATO - INCAPACIDAD 36%"
-    """
-    doc = Document()
+from formato_escrito import (
+    nuevo_documento, titulo_principal, encabezado_tribunal,
+    parrafo_letrado, titulo_seccion, parrafo, firma,
+)
 
-    # Estilo base: Arial 12pt, interlineado 1.5, sin espacio despues
-    style = doc.styles['Normal']
-    style.font.name = 'Arial'
-    style.font.size = Pt(12)
-    style.paragraph_format.line_spacing = 1.5
-    style.paragraph_format.space_after = Pt(0)
-
-    # Configurar margenes
-    for section in doc.sections:
-        section.top_margin = Cm(2)
-        section.bottom_margin = Cm(2)
-        section.left_margin = Cm(3)
-        section.right_margin = Cm(2)
-
-    # Titulo principal (IZQUIERDA, negrita, subrayado)
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(titulo_principal.upper())
-    run.bold = True
-    run.underline = True
-    run.font.size = Pt(12)
-    run.font.name = 'Arial'
-
-    doc.add_paragraph()  # Espacio
-
-    for titulo_seccion, texto in secciones:
-        if titulo_seccion:
-            # Titulo de seccion: negrita + subrayado + IZQUIERDA
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            run = p.add_run(titulo_seccion)
-            run.bold = True
-            run.underline = True
-            run.font.size = Pt(12)
-            run.font.name = 'Arial'
-
-        # Parrafos del texto (JUSTIFICADOS)
-        for parrafo in texto.split('\n\n'):
-            parrafo = parrafo.strip()
-            if parrafo:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                run = p.add_run(parrafo)
-                run.font.size = Pt(12)
-                run.font.name = 'Arial'
-
-    doc.save(output_path)
+doc = nuevo_documento()
+titulo_principal(doc, "PARTE ACTORA PRESENTA ALEGATO")
+encabezado_tribunal(doc, "Sr. Juez:")
+parrafo_letrado(
+    doc,
+    "MATÍAS CHRISTIAN GARCÍA CLIMENT",
+    ", abogado, T° 97 F° 16 C.P.A.C.F., en autos ",
+    '"GIMÉNEZ, JUAN c/ ART X s/ ACCIDENTE" Expte. N° 12345/2023',
+    ", a V.S. respetuosamente digo:",
+)
+titulo_seccion(doc, "I.- OBJETO")
+parrafo(doc, "Vengo en tiempo y forma a producir el alegato...")
+titulo_seccion(doc, "II.- ANTECEDENTES")
+parrafo(doc, "...")
+# ... más secciones
+firma(doc)
+doc.save("/tmp/alegato.docx")
 ```
 
-Si python-docx no esta instalado, instalarlo con:
-```bash
-pip3 install python-docx
-```
+**Para SCBA (Provincia de Buenos Aires): generar HTML.**
+El escrito se sube vía `scba_guardar_borrador` con el HTML en `texto_html`.
 
-Alternativa si python-docx falla: generar un HTML y convertir con textutil:
-```bash
-textutil -convert docx /tmp/alegato.html -output /tmp/alegato.docx
-```
+Reglas para el HTML del alegato SCBA:
+- Cuerpo: `<p style="text-align: justify; text-indent: 1.25cm;">[texto]</p>`
+- Encabezado tribunal: `<p style="text-align: left;">Excmo. Tribunal:</p>`
+- Título principal: `<p style="text-align: justify;"><strong><u>PARTE ACTORA PRESENTA ALEGATO</u></strong></p>`
+- Título de sección: `<p style="text-align: justify; text-indent: 1.25cm;"><strong><u>I.- OBJETO</u></strong></p>` (precedido por `<p>&nbsp;</p>` como línea en blanco)
+- Items petitorio: `<p style="text-align: justify;">1. ...</p>` (sin text-indent)
 
-## Instrucciones para generar HTML (solo SCBA/Provincia)
-
-Para causas de Provincia de Buenos Aires, SIEMPRE generar HTML:
-
-```html
-<p style="text-align: left;"><strong><u>PARTE ACTORA PRESENTA ALEGATO</u></strong></p>
-<p style="text-align: left;">[Encabezado con datos del letrado y expediente]</p>
-<p style="text-align: left;"><strong><u>I.- OBJETO</u></strong></p>
-<p style="text-align: left;">[Texto del objeto]</p>
-<p style="text-align: left;"><strong><u>II.- ANTECEDENTES</u></strong></p>
-<p style="text-align: left;">[Texto de antecedentes]</p>
-```
-
-Titulos: `<strong><u>TITULO</u></strong>` — SIEMPRE con `<u>`. Parrafos: `<p style="text-align: left;">`.
+NUNCA usar `text-align: left` para el cuerpo en SCBA — la memoria del usuario indica
+justificado siempre.
 
 ## Notas importantes
 

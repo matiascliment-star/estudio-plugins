@@ -39,36 +39,49 @@ Leer de `~/.env` (path absoluto: `/Users/matiaschristiangarciacliment/.env`):
 
 ## Formato de los documentos
 
-### Estilo obligatorio (copiar del formato del usuario)
-- **Font:** Times New Roman 12pt (heredado del estilo Normal)
-- **Interlineado:** 2.0
-- **Sangría primera línea párrafos normales:** ~1.19cm (Emu 450215)
-- **Sangría encabezado MATÍAS:** ~1.42cm (Emu 540385)
-- **Títulos de sección:** negrita + subrayado, con sangría normal, space_before 12pt
-- **Título principal:** alineado a la izquierda, negrita + subrayado, SIN sangría
-- **"Sr. Juez:" / "Excma. Cámara:" / destinatario:** SIN sangría
-- **Petitorio items, "Proveer de conformidad", "SERÁ JUSTICIA":** SIN sangría
-- **Firma:** centrada, nombre en negrita
-- **Márgenes:** 3cm izq, 2cm der, 2cm arriba, 2cm abajo
-- **NO usar viñetas con guión (-).** Todo en prosa. Las enumeraciones a), b), c) se permiten para argumentos puntuales pero preferir prosa fluida.
+**FUENTE ÚNICA DE VERDAD:**
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/references/formato-escrito.md`
++ helper en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts/formato_escrito.py`.
+
+**NO inventar formato propio. NO copiar bloques de python-docx hardcodeados.**
+
+Resumen del formato que TODOS los REX/RI deben respetar:
+- Times New Roman 12 pt, **interlineado 1.5** (NO 2.0)
+- Cuerpo justificado, sangría 1.25 cm
+- Título principal: **JUSTIFICADO** (no "izquierda"), sin sangría, negrita+subrayado
+- Encabezado tribunal ("Excma. Corte:", "Sr. Juez:"): izquierda, sin sangría
+- Párrafo letrado de intro: sangría 1.5 cm, nombre y carátula en negrita
+- Títulos de sección (I, II, III…): justificado, sangría 1.25 cm, negrita+subrayado, línea en blanco antes
+- Items petitorio / "SERÁ JUSTICIA": justificado, sin sangría
+- Firma: centrada, nombre en negrita
+- Márgenes: 3cm izq, 2cm der/sup/inf
+- **NO usar viñetas con guión (-).** Todo en prosa. Enumeraciones a), b), c) sólo para argumentos puntuales.
 
 ```python
-from docx import Document
-from docx.shared import Pt, Cm, Emu
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+import sys
+sys.path.insert(0, "/Users/matiaschristiangarciacliment/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts")
 
-doc = Document()
-for s in doc.sections:
-    s.top_margin = Cm(2); s.bottom_margin = Cm(2)
-    s.left_margin = Cm(3); s.right_margin = Cm(2)
+from formato_escrito import (
+    nuevo_documento, titulo_principal, encabezado_tribunal,
+    parrafo_letrado, titulo_seccion, parrafo, firma,
+)
 
-style = doc.styles['Normal']
-style.font.name = 'Times New Roman'; style.font.size = Pt(12)
-style.paragraph_format.line_spacing = 2.0
-style.paragraph_format.space_after = Pt(0)
-
-INDENT_NORMAL = Emu(450215)  # ~1.19cm
-INDENT_ENCAB = Emu(540385)   # ~1.42cm
+doc = nuevo_documento()
+titulo_principal(doc, "INTERPONE RECURSO EXTRAORDINARIO FEDERAL")
+encabezado_tribunal(doc, "Excma. Corte Suprema de Justicia de la Nación:")
+parrafo_letrado(
+    doc,
+    "MATÍAS CHRISTIAN GARCÍA CLIMENT",
+    ", abogado, T° 97 F° 16 C.P.A.C.F., con domicilio electrónico constituido en 2031306198, en autos ",
+    '"VÁZQUEZ, MIGUEL ANGEL c/ SWISS MEDICAL ART s/ ACCIDENTE - LEY ESPECIAL" Expte. N° 045419/2021',
+    ", a V.E. respetuosamente digo:",
+)
+titulo_seccion(doc, "I. OBJETO")
+parrafo(doc, "Vengo en tiempo y forma a interponer recurso extraordinario federal...")
+# ... siguientes secciones (II Causales, III Antecedentes, etc.)
+firma(doc)
+doc.save("/path/al/rex.docx")
 ```
 
 ## Estructura del REX (Recurso Extraordinario Federal)

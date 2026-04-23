@@ -94,72 +94,72 @@ Antes de redactar, presentar al usuario un resumen breve:
 
 ### FASE 4: Generar el DOCX con formato profesional
 
-**REGLAS DE FORMATO OBLIGATORIAS:**
+**REGLAS DE FORMATO — FUENTE ÚNICA DE VERDAD:**
 
-Usar `python-docx` para generar el archivo. El formato debe ser:
+El formato exacto está definido en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/references/formato-escrito.md`
+y la implementación en
+`~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts/formato_escrito.py`.
+
+**NO inventar formato propio. NO copiar bloques de python-docx hardcodeados.**
+Importar el helper y usar sus funciones — eso garantiza que todos los escritos
+del estudio salgan idénticos.
 
 ```python
-from docx import Document
-from docx.shared import Pt, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+import sys
+sys.path.insert(0, "/Users/matiaschristiangarciacliment/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts")
 
-doc = Document()
+from formato_escrito import (
+    nuevo_documento,
+    titulo_principal,        # JUSTIFICADO, sin sangría, negrita+subrayado
+    encabezado_tribunal,     # IZQUIERDA, sin sangría
+    parrafo_letrado,         # sangría 1.5cm, nombre y carátula en negrita
+    titulo_seccion,          # justificado, sangría 1.25cm, negrita+subrayado, línea en blanco antes
+    parrafo,                 # justificado, sangría 1.25cm
+    firma,                   # centrado, nombre en negrita
+)
 
-# Márgenes
-for s in doc.sections:
-    s.top_margin = Cm(2)
-    s.bottom_margin = Cm(2)
-    s.left_margin = Cm(3)
-    s.right_margin = Cm(2)
-
-# Estilo base
-style = doc.styles['Normal']
-style.font.name = 'Times New Roman'
-style.font.size = Pt(12)
-style.paragraph_format.line_spacing = 1.5
-style.paragraph_format.space_after = Pt(0)
+doc = nuevo_documento()
+titulo_principal(doc, "CONTESTA VISTA — RECHAZA IMPUGNACIÓN")
+encabezado_tribunal(doc, "Sr. Juez:")
+parrafo_letrado(
+    doc,
+    "MATÍAS CHRISTIAN GARCÍA CLIMENT",
+    ", abogado inscripto al T° 97 F° 16 del C.P.A.C.F., C.U.I.T 20-31380619-8, "
+    "I.V.A. responsable inscripto, apoderado de la PARTE ACTORA y POR DERECHO PROPIO, "
+    "manteniendo el domicilio procesal en la Av. Ricardo Balbín 2368, C.A.B.A. "
+    "(zona de notificación 204, e-mail: matiasgarciacliment@gmail.com, tel: 4-545-2488) "
+    "y domicilio electrónico en 2031306198, en los autos caratulados ",
+    '"VÁZQUEZ, MIGUEL ANGEL c/ SWISS MEDICAL ART s/ ACCIDENTE - LEY ESPECIAL" Expte. N° 045419/2021',
+    ", a V.S. respetuosamente digo:",
+)
+titulo_seccion(doc, "I. OBJETO")
+parrafo(doc, "Vengo por el presente a contestar...")
+titulo_seccion(doc, "II. FUNDAMENTOS")
+parrafo(doc, "...")
+titulo_seccion(doc, "III. RESERVA CASO FEDERAL")
+parrafo(doc, "En virtud de que una sentencia que no admita...")
+titulo_seccion(doc, "IV. PETITORIO")
+parrafo(doc, "Por todo lo expuesto, solicito a V.S.:", sangria=False)
+parrafo(doc, "1. Tenga por contestada la vista...", sangria=False)
+parrafo(doc, "2. Rechace la impugnación...", sangria=False)
+parrafo(doc, "Proveer de conformidad, SERÁ JUSTICIA.")
+firma(doc)
+doc.save("/path/al/escrito.docx")
 ```
-
-**Tipos de párrafo:**
-
-| Tipo | Alineación | Sangría 1ra línea | Font | Negrita | Subrayado |
-|------|-----------|-------------------|------|---------|-----------|
-| Título principal | Centro | No | 12pt TNR | Sí | Sí |
-| Título de sección (I, II, III...) | Justificado | No | 12pt TNR | Sí | Sí |
-| Párrafo normal | Justificado | 1.25cm | 12pt TNR | No | No |
-| Párrafo sin sangría (petitorio items) | Justificado | No | 12pt TNR | No | No |
-| Firma | Centro | No | 12pt TNR | Sí (nombre) | No |
 
 **Estructura estándar de todo escrito:**
 
 ```
-[TÍTULO DEL ESCRITO - centrado, negrita, subrayado]
-
-Sr. Juez:
-
-[Encabezado con datos del letrado según jurisdicción, expediente, domicilios]
-
-I. OBJETO
-[Qué se pide]
-
-II-N. [SECCIONES DE FUNDAMENTO]
-[Argumentación]
-
-N+1. RESERVA CASO FEDERAL
-[Fórmula estándar]
-
-N+2. PETITORIO
-Por todo lo expuesto, solicito a V.S.:
-1. ...
-2. ...
-
-Proveer de conformidad,
-SERÁ JUSTICIA.
-
-MATÍAS CHRISTIAN GARCÍA CLIMENT
-ABOGADO
-T° 97 F° 16 C.P.A.C.F. / T° 46 F° 393 C.A.S.I.
-(Firmado electrónicamente)
+[TÍTULO DEL ESCRITO]                       ← titulo_principal
+Sr. Juez:                                  ← encabezado_tribunal
+[Datos del letrado + carátula]             ← parrafo_letrado
+I. OBJETO                                  ← titulo_seccion
+  [cuerpo]                                 ← parrafo
+II–N. [SECCIONES DE FUNDAMENTO]            ← titulo_seccion + parrafo
+N+1. RESERVA CASO FEDERAL                  ← titulo_seccion + parrafo
+N+2. PETITORIO                             ← titulo_seccion + parrafo(sangria=False)
+[firma]                                    ← firma
 ```
 
 **Reserva caso federal estándar:**
