@@ -286,15 +286,48 @@ Las filas stub de los que sí anduvieron quedan actualizadas. Las que fallaron p
 ## Compartido con `corrida-caducidad-diaria`
 
 **Por referencia, no copia:**
-- Scripts Python: `../corrida-caducidad-diaria/scripts/generar_escrito.py`, `../corrida-caducidad-diaria/scripts/upload_onedrive.py`
+- Script Python de generación: `../corrida-caducidad-diaria/scripts/generar_escrito.py`
 - Modelos de escritos: `../corrida-caducidad-diaria/modelos/*.md`
 - Reglas procesales: `../corrida-caducidad-diaria/reglas-procesales.md`
 
-**Reglas duras que aplican igual:**
-- `borrador_onedrive_url` solo URLs https del tenant del estudio, nunca paths locales.
-- Si no hay `onedrive_id` en el expediente: no subir, dejar `borrador_onedrive_url = NULL`.
-- Si `upload_onedrive.py` falla: dejar `borrador_onedrive_url = NULL`, anotar en `texto_sugerido` "⚠️ Upload OneDrive falló: ...".
-- Oficina destino: igual regla (default `NULL`, override solo en incidentes / alzadas / conexos).
+## Subida a OneDrive — GitHub relay (IDÉNTICO a corrida 7am)
+
+**NO usar el script `upload_onedrive.py` directo** — ese requiere env vars (`SUPABASE_SERVICE_KEY`, `MS_TENANT_ID`, etc.) que el runtime remoto de Anthropic NO tiene configuradas. En la corrida 2026-04-24 esto rompió el upload y los DOCX quedaron en `/tmp` del subagente, se perdieron al terminar la sesión.
+
+**Usar el mismo patrón que `corrida-caducidad-diaria`:**
+
+1. El trigger remoto clona 2 repos: `estudio-plugins` + `caducidad-borradores`.
+2. Cada subagente genera el DOCX con `scripts/generar_escrito.py` **guardando en el working copy de `caducidad-borradores`**:
+   ```
+   caducidad-borradores/YYYY-MM-DD/{tipo}-{APELLIDO}.docx
+   ```
+3. Al terminar TODOS los subagentes del pedido, el orquestador hace:
+   ```bash
+   cd caducidad-borradores && git add -A && git commit -m 'Pedir mas caducidad YYYY-MM-DD pedido X' && git push
+   ```
+   (El clone del trigger remoto viene con credenciales de push para este repo — es un repo dedicado al relay.)
+4. Para cada DOCX, llamar la edge function `upload-to-onedrive` vía `pg_net.http_post`:
+   ```sql
+   SELECT net.http_post(
+     url := 'https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/upload-to-onedrive',
+     headers := '{"Content-Type":"application/json"}'::jsonb,
+     body := jsonb_build_object(
+       'onedrive_id', '<onedrive_id del expediente>',
+       'subpath', 'Borradores caducidad/YYYY-MM-DD/{tipo}-{APELLIDO}.docx',
+       'github_path', 'YYYY-MM-DD/{tipo}-{APELLIDO}.docx'
+     )
+   );
+   ```
+5. La edge function hace fetch del raw del repo `caducidad-borradores` con el PAT ya configurado en sus secrets, y PUT a Microsoft Graph. Devuelve `webUrl` del SharePoint. Se usa `refresh-microsoft-token` internamente para mantener el token vivo.
+6. Polear `net._http_response` por el `id` del request; extraer `webUrl` del body JSON; `UPDATE caducidad_corridas SET borrador_onedrive_url = $webUrl WHERE id = ...`.
+
+**⚠️ NUNCA usar `content_base64` ni curl directo desde el subagente** — ambos caminos fallaron en corridas previas (límite MCP SQL + sandbox allowlist).
+
+**Reglas duras para `borrador_onedrive_url`:**
+- Solo URLs https del tenant del estudio (`abogadosgc-my.sharepoint.com/...`). Nunca paths locales (`/tmp/...`).
+- Si no hay `onedrive_id` en el expediente: no generar DOCX, dejar `borrador_onedrive_url = NULL` y anotar en `texto_sugerido` "⚠️ Sin carpeta OneDrive para este expediente".
+- Si la edge function devuelve error (poll del `net._http_response` con `status_code != 200`): dejar `borrador_onedrive_url = NULL`, anotar en `texto_sugerido` "⚠️ Upload OneDrive falló: {error corto}".
+- Oficina destino: igual regla que corrida 7am (default `NULL`, override solo en incidentes / alzadas / conexos).
 
 ## Credenciales y entorno
 
