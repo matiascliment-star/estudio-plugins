@@ -6,8 +6,10 @@ description: >
   de Supabase, toma el pedido más viejo en estado `pendiente`, analiza los N expedientes
   que ya seleccionó la edge function `pedir-mas-caducidad`, genera los DOCX de fórmula,
   los sube a OneDrive, y hace UPDATE sobre las filas stub que la edge function dejó
-  pre-creadas en `caducidad_corridas`. No manda WhatsApp (la abogada está mirando la app).
-  Disparado por scheduled task `pedir-mas-caducidad.md` cada 2 min L-V 8-20hs AR.
+  pre-creadas en `caducidad_corridas`. Al finalizar manda 2 mensajes de WhatsApp: uno a la
+  abogada (o a Matías si es Kuki/Paula) con el detalle de los casos pedidos, y un resumen
+  ejecutivo a Matías. Disparado por trigger remoto Anthropic con cron horario L-V 8-20hs AR
+  (o disparado on-demand desde la edge function cuando se aprieta el botón en la app).
   Triggers: "pedir mas caducidad", "procesar cola caducidad", "pedido on-demand caducidad".
 ---
 
@@ -32,7 +34,7 @@ La app muestra "⏳ Analizando IA…" mientras `analisis_pendiente=true` y luego
 | Selección de expedientes | La skill hace la query Fase 1 | La edge function ya seleccionó y creó stubs |
 | Cantidad | 40 fijos (10 × 4 abogadas) | N variable (1-30, default 10) |
 | Inserción en `caducidad_corridas` | `INSERT` | `UPDATE` (filas stub ya existen) |
-| WhatsApp | Sí (4 abogadas + resumen a Matías) | No (la abogada está en la app) |
+| WhatsApp | Sí (4 abogadas + resumen a Matías) | Sí (1 abogada destinataria + resumen a Matías) |
 | Tandas de subagentes | 4 tandas de 10 paralelos | 1 tanda de N paralelos (máx 30) |
 | `numero_corrida` | 1 (o 2 si se corrió manual antes) | `max(hoy)+1` (la edge function lo asigna) |
 
@@ -139,9 +141,71 @@ WHERE fecha = CURRENT_DATE
   AND analisis_pendiente = true;  -- safety: no pisar una corrida de 7am ya analizada
 ```
 
-### Fase 4: Marcar el pedido como completado
+### Fase 4: WhatsApp — abogada destinataria + resumen ejecutivo a Matías
 
-Cuando los N subagentes terminaron:
+Cuando los N subagentes terminaron, mandar **2 mensajes** (NO mandar mientras se procesa, solo al final):
+
+#### 4.a) WhatsApp a la abogada (1 mensaje, partible)
+
+Usa la **misma tabla de destinatarios y reglas duras** que `corrida-caducidad-diaria` (ver Fase 5 de aquel SKILL.md):
+
+| Destinataria | Número WhatsApp |
+|---|---|
+| Eliana | `5491155681611` (su celular — directo) |
+| Mara | `5491150547137` (su celular — directo) |
+| Kuki | `5491140439075` (Matías, con prefijo `*[Para: Kuki]*`) |
+| Paula | `5491140439075` (Matías, con prefijo `*[Para: Paula]*`) |
+
+Estructura del mensaje (la abogada del pedido recibe SOLO los N casos del pedido — no los 10 originales del 7am):
+
+```
+*PEDIDO EXTRA — {ABOGADA} ({JURISDICCION})*
+_Pedido {fecha_HH:MM} · {N} expedientes · pedido por {pedido_por o "ella misma"}_
+
+*1.* {CARATULA_CORTA} — {NUMERO} · dr={dr}
+{EMOJI} {tipo_impulso_legible}
+
+📌 *Estado:* {estado_procesal}
+🔬 *Prueba producida:* {prueba_producida}
+⏳ *Prueba pendiente:* {prueba_pendiente}
+🎯 *Obstáculo:* {obstaculo_actual}
+🧭 *Estrategia:* {estrategia_sugerida}
+✏️ *Hoy:* {accion_inmediata}
+
+📎 Borrador: {link_onedrive | "—"}
+
+*2.* ...
+```
+
+**Reglas anti idle-timeout (heredadas de la corrida diaria):**
+
+1. **Nunca escribir helpers Python** — usar las MCP tools `mcp__whatsapp__wa_send_text` directo.
+2. **Particionar mensajes >3500 chars** en 2-3 mensajes consecutivos prefijados `[Parte 1/3] PEDIDO EXTRA`, etc.
+3. Para la abogada que recibe en su celular (Eliana, Mara): **NO** prefijar con `*[Para: NOMBRE]*`. Para Kuki/Paula que va a Matías: SÍ prefijar.
+
+#### 4.b) Resumen ejecutivo a Matías (1 mensaje corto, siempre va al `5491140439075`)
+
+```
+*RESUMEN EJECUTIVO PEDIDO EXTRA — {fecha_HH:MM}*
+
+👩‍💼 Pedido por: {pedido_por o "{ABOGADA}"}
+📋 Para: {ABOGADA} ({JURISDICCION})
+🔢 N pedidos: {N}
+✅ Procesados OK: {n_ok}
+❌ Fallaron: {n_fail}
+
+🚨 Críticos detectados: {n_criticos}
+{lista corta de carátulas críticas}
+
+📝 Borradores generados: {n_borradores}
+🔗 Pedido_id: {pedido_id} · numero_corrida: {numero_corrida}
+```
+
+Este mensaje a Matías SIEMPRE se envía al `5491140439075`, sin importar quién pidió. Sirve de auditoría — Matías ve qué pidió cada abogada y con qué resultado.
+
+### Fase 5: Marcar el pedido como completado
+
+Cuando los N subagentes terminaron Y los WhatsApp ya salieron:
 
 ```sql
 UPDATE pedidos_caducidad_pendientes
@@ -183,11 +247,17 @@ Leer de `/Users/matiaschristiangarciacliment/.env` si corresponde:
 
 ## Schedule
 
-Scheduled task `pedir-mas-caducidad.md` con cron `*/2 11-23 * * 1-5` (cada 2 min L-V, 11-23 UTC = 8-20 AR).
+**Trigger remoto Anthropic** con cron horario L-V (mínimo soportado por triggers Anthropic = 1h):
 
-**Justificación:** la latencia máxima percibida por la abogada desde que aprieta "Pedir más casos" hasta que ve "⏳ Analizando…" en su lista es de 2 min (tiempo de espera del próximo tick del cron) + ~2-3 min (análisis) = 4-5 min total. Aceptable.
+```
+cron: "7 11-23 * * 1-5"   # cada hora 8:07 a 20:07 AR (= 11:07 a 23:07 UTC)
+```
 
-Fuera de ese horario (noche, fin de semana) no corre — si alguien pide a las 21hs, queda en la cola hasta las 8am del día hábil siguiente.
+**Latencia esperada:** hasta 1h desde que se aprieta el botón hasta que arranca el procesamiento. Promedio ~30 min. Aceptable porque la abogada apenas pide sigue laburando los originales.
+
+**Disparo on-demand (mejor latencia):** la edge function `pedir-mas-caducidad` puede llamar adicionalmente al endpoint `POST /v1/code/triggers/{id}/run` para disparar el trigger inmediatamente después de encolar el pedido. Eso baja la latencia a ~30 segundos. Requiere OAuth token de claude.ai en Supabase secrets — implementación pendiente.
+
+Fuera del horario hábil (noche, fin de semana) el cron no corre — si alguien pide a las 21hs, queda en la cola hasta las 8am del día hábil siguiente.
 
 ## Tiempo esperado
 
@@ -204,8 +274,9 @@ Fuera de ese horario (noche, fin de semana) no corre — si alguien pide a las 2
 4. Lanzar **N subagentes Opus 4.7 en 1 tanda paralela** (N ≤ 30).
 5. Cada subagente: analiza, genera DOCX, sube a OneDrive, hace UPDATE en `caducidad_corridas`.
 6. Esperar a que terminen todos (con timeout 180 seg por subagente, 1 reintento).
-7. Marcar pedido como `completado` (o `error` si todos fallaron).
-8. Reportar al scheduled trigger: cantidad procesada + cantidad fallida.
+7. **Mandar 2 mensajes WhatsApp**: uno a la abogada destinataria con los N casos analizados (siguiendo tabla de destinatarios de Fase 4.a), y un resumen ejecutivo a Matías (Fase 4.b) — usar MCP tools `mcp__whatsapp__wa_send_text`, NUNCA helpers Python.
+8. Marcar pedido como `completado` (o `error` si todos fallaron).
+9. Reportar al scheduled trigger: cantidad procesada + cantidad fallida.
 
 Si algún subagente timeout, la fila queda con `analisis_pendiente=true` — el orquestador la deja así y lo registra en `error_msg`.
 
