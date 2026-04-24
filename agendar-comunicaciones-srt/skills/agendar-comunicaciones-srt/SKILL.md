@@ -64,6 +64,18 @@ ORDER BY fecha;
 
 ### Paso 1 — Comunicaciones pendientes con texto
 
+**⚠️ Antes de empezar**, guardar el timestamp de inicio de esta corrida. Se usa
+al final (Paso 7) para identificar qué comunicaciones fueron agendadas en este
+run. Ejecutar en Bash y guardar:
+
+```bash
+date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/inicio_run.txt
+cat /tmp/inicio_run.txt
+```
+
+El contenido de `/tmp/inicio_run.txt` (ej. `2026-04-24T07:00:15Z`) es el
+`<INICIO_RUN_ISO>` que reemplaza en el SQL del Paso 7.
+
 ```sql
 SELECT m.id AS comunicacion_id,
   m.srt_expediente_nro AS srt,
@@ -718,180 +730,128 @@ Verificar en `net._http_response` que el status sea 200 antes de dar por exitoso
 
 Si **no hay `grupo_cliente_wa`** para el caso (no se encontró match automático por nombre) → incluir en el reporte del grupo Claude SRT con flag "sin grupo WA del cliente, avisar manual". Mara/Noe pueden actualizar manualmente la columna `casos_srt.wa_chat_id` cuando encuentren el grupo correcto.
 
-### Paso 6 — Generar reporte
+### Paso 6 — (integrado en Paso 7)
+
+El armado del reporte, el post-check de huérfanos y el INSERT del run se hacen
+todos juntos en una sola query SQL atómica — ver Paso 7. Este paso queda como
+número histórico para no romper referencias.
+
+### Paso 6.5 — (integrado en Paso 7)
+
+El post-check de huérfanos (detectar comunicaciones dentro de la ventana que no
+se agendaron) lo hace la función `fn_armar_reporte_agendar_srt` directamente
+contra Supabase, apendando un bloque `⚠️ ALERTA` al reporte si corresponde.
+Este paso queda como número histórico.
+
+### Paso 7 — INSERT run atómico (arma reporte + dispara WA al grupo)
+
+⚠️ **IMPORTANTE**: este paso colapsa lo que antes eran Paso 6 (generar reporte),
+Paso 6.5 (post-check) y Paso 7 (INSERT) en una única query SQL atómica. Esto
+evita que el agente se cuelgue por stream idle timeout al final del flow:
+Postgres arma el texto del reporte sin que Claude tenga que cargar
+`/tmp/procesadas.json` al contexto ni iterar en Python.
+
+El único dato que el agente necesita proveer al SQL es:
+1. `inicio_run` — timestamp de cuando comenzó esta corrida (guardalo al inicio
+   del Paso 1 con `date -u +%Y-%m-%dT%H:%M:%SZ`). Todas las comunicaciones
+   agendadas después de ese timestamp por `agendado_por='claude'` se consideran
+   "de este run".
+2. `errores_jsonb` — array jsonb con los errores acumulados en `/tmp/errores_proceso.json`.
+3. `sin_grupo_jsonb` — array jsonb con las citaciones sin `grupo_cliente_wa`
+   (cada item tiene `nombre_actor`, `srt`, `aviso_cliente`).
+4. `avisos_enviados` — count de avisos WA al cliente que salieron OK.
+
+Recolectá esos datos con un script Python chiquito (no releer `/tmp/procesadas.json`
+entero — solo los campos necesarios para esos 3 inputs):
 
 ```python
 import json
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 procesadas = json.load(open('/tmp/procesadas.json'))
 errores = json.load(open('/tmp/errores_proceso.json'))
-sin_grupo_citacion = [p for p in procesadas if p.get('aviso_cliente') and not p.get('grupo_cliente_wa')]
-avisos_enviados = [p for p in procesadas if p.get('aviso_cliente') and p.get('grupo_cliente_wa') and p.get('aviso_ok')]
 
-# Fecha en timezone AR (el server puede estar en UTC)
-hoy = datetime.now(ZoneInfo('America/Argentina/Buenos_Aires')).date()
-L = [f'📋 *AGENDAR COMUNICACIONES SRT* — {hoy.strftime("%d/%m/%Y")}']
-L.append(f'Agendadas: {len(procesadas)} | Avisos WA clientes: {len(avisos_enviados)} | Sin grupo: {len(sin_grupo_citacion)} | Errores: {len(errores)}')
+# Solo los errores mínimos (nombre_actor, srt, tipo_comunicacion, error)
+errores_min = [
+  {'nombre_actor': e.get('nombre_actor') or '?',
+   'srt': e.get('srt') or '?',
+   'tipo_comunicacion': e.get('tipo_comunicacion') or '?',
+   'error': (e.get('error') or '?')[:200]}
+  for e in errores
+]
 
-# Listado por tipo
-def grupo(tipo):
-    return [p for p in procesadas if p['tipo_comunicacion'] == tipo]
+# Sin grupo: citaciones con aviso_cliente pero sin grupo_cliente_wa
+sin_grupo = [
+  {'nombre_actor': p.get('nombre_actor') or '?',
+   'srt': p.get('srt') or '?',
+   'aviso_cliente': (p.get('aviso_cliente') or '')[:2000]}
+  for p in procesadas
+  if p.get('aviso_cliente') and not p.get('grupo_cliente_wa')
+]
 
-def fmt_fecha(s):
-    """YYYY-MM-DD → DD/MM"""
-    try:
-        y,m,d = s.split('-'); return f"{d}/{m}"
-    except: return s or '?'
+avisos_ok = sum(1 for p in procesadas if p.get('aviso_ok'))
 
-dict_med = grupo('Notificación de Dictamen Médico')
-if dict_med:
-    L.append('\n✅ *DICTAMEN MÉDICO — plazo 3 hábiles p/ impugnar*')
-    for p in dict_med:
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — DICT MED notificado {fmt_fecha(p.get('fecha_notif'))} → vence impugnar {fmt_fecha(p['fecha_evento'])}")
-
-const = grupo('Notificación de Constancia de Orden de Estudio')
-const_intim = [p for p in const if p.get('subtipo') == 'intimacion_abogado']
-const_estudio = [p for p in const if p.get('subtipo') == 'orden_estudio_cliente']
-if const_intim:
-    L.append('\n📝 *CONSTANCIA (INTIMACIÓN AL ABOGADO) — plazo 5 hábiles p/ contestar*')
-    for p in const_intim:
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — notificada {fmt_fecha(p.get('fecha_notif'))} → vence contestar {fmt_fecha(p['fecha_evento'])}")
-if const_estudio:
-    L.append('\n🏥 *ORDEN DE ESTUDIO AL CLIENTE — agendada + aviso WA*')
-    for p in const_estudio:
-        mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
-        L.append(f"• {p['nombre_actor']} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → estudio {fmt_fecha(p['fecha_evento'])} {p.get('hora','')} {p.get('estudios','')[:50]}{mk}")
-
-examen = grupo('Notificación de Citación')
-if examen:
-    L.append('\n🏥 *CITACIÓN EXAMEN FÍSICO — agendada + aviso WA*')
-    for p in examen:
-        mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
-        L.append(f"• {p['nombre_actor']} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → examen {fmt_fecha(p['fecha_evento'])} {p.get('hora','')}{mk}")
-
-clausuras = [p for p in procesadas if p['tipo_comunicacion'] == 'Notificación de Acto Administrativo' and 'Clausura' in (p.get('detalle') or '')]
-if clausuras:
-    L.append('\n🏛️ *CLAUSURAS SRT — agendadas en ✱ Vencimientos*')
-    for p in clausuras:
-        sub = p.get('subtipo','')
-        plazos = '15+90d' if 'pcia' in sub else '15d'
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → {plazos}, vence {fmt_fecha(p['fecha_evento'])}")
-
-homo = grupo('Notificación de Citación al Servicio de Homologación')
-if homo:
-    L.append('\n⚖️ *AUDIENCIA HOMOLOGACIÓN — agendada + aviso WA*')
-    for p in homo:
-        mk = '' if p.get('aviso_ok') else (' ⚠️sin grupo' if not p.get('grupo_cliente_wa') else ' 🔴aviso fallo')
-        L.append(f"• {p['nombre_actor']} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))} → audiencia {fmt_fecha(p['fecha_evento'])} {p.get('hora','')}{mk}")
-
-prest_din = [p for p in procesadas if p.get('subtipo') == 'prest_dineraria']
-if prest_din:
-    L.append('\n💵 *NOTIFICACIÓN DE CÁLCULO DE PRESTACIÓN DINERARIA — revisar monto liquidado*')
-    L.append('_(Informativo. Abrir el PDF en Mi Ventanilla y controlar el cálculo.)_')
-    for p in prest_din:
-        L.append(f"• {p['nombre_actor'] or '(sin nombre)'} ({p['srt']}) — notif {fmt_fecha(p.get('fecha_notif'))}")
-
-rev_manual = [p for p in procesadas if p.get('subtipo') == 'requiere_revision_manual']
-if rev_manual:
-    L.append('\n📎 *REVISAR PDF MANUAL — scraper no extrajo texto*')
-    L.append('_(PDFs escaneados sin OCR. Abrir en Mi Ventanilla, leer la fecha/hora del estudio y agendarlos manualmente.)_')
-    for p in rev_manual:
-        L.append(f"• {p.get('nombre_actor') or '(sin nombre)'} ({p['srt']}) — {p['tipo_comunicacion']}: {p.get('razon','(sin razón)')}")
-
-if sin_grupo_citacion:
-    L.append('\n📞 *CITACIONES SIN GRUPO WA DEL CLIENTE — copiar y pegar al cliente*')
-    L.append('_(Mara: copiá el mensaje de cada uno y pegáselo al cliente por WA. Después matcheá el grupo en `casos_srt.wa_chat_id` para que la próxima salga sola.)_')
-    for s in sin_grupo_citacion:
-        L.append(f"\n———— *{s['nombre_actor']}* ({s['srt']}) ————")
-        L.append(s['aviso_cliente'])
-
-if errores:
-    L.append('\n🔴 *ERRORES DE PROCESAMIENTO*')
-    for e in errores:
-        L.append(f"• {e.get('nombre_actor','?')} ({e['srt']}) {e['tipo_comunicacion']}: {e['error']}")
-
-if not procesadas and not errores:
-    L.append('\n✅ Sin comunicaciones nuevas hoy.')
-
-open('/tmp/reporte.txt','w').write('\n'.join(L))
+open('/tmp/errores_min.json','w').write(json.dumps(errores_min, ensure_ascii=False))
+open('/tmp/sin_grupo_min.json','w').write(json.dumps(sin_grupo, ensure_ascii=False))
+open('/tmp/avisos_ok.txt','w').write(str(avisos_ok))
+print('ready')
 ```
 
-### Paso 6.5 — Post-check de sanity (detectar items salteados)
-
-Después de generar el reporte, ejecutar una query adicional a Supabase para
-detectar si **quedaron comunicaciones dentro de la ventana que NO se agendaron**
-en esta corrida (indicaría que el agente se saltó items por sobrecarga, cadena
-parcial, etc.). Si las hay, apendear un bloque **⚠️ ALERTA** al `/tmp/reporte.txt`
-antes del INSERT del Paso 7.
+Después ejecutá **una sola query SQL** que hace todo atómicamente:
 
 ```sql
--- Misma ventana + mismos tipos procesables del Paso 1, pero filtrando solo
--- los que quedaron sin agendar (candidatos huérfanos después del run actual)
-SELECT m.srt_expediente_nro, m.tipo_comunicacion,
-       (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_notif,
-       c.nombre
-FROM comunicaciones_miventanilla m
-LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
-WHERE m.tipo_comunicacion IN (
-    'Notificación de Dictamen Médico',
-    'Notificación de Constancia de Orden de Estudio',
-    'Notificación de Citación',
-    'Notificación de Citación al Servicio de Homologación',
-    'Notificación de Acto Administrativo',
-    'Envío de Comunicación'
-  )
-  AND m.agendado_en_calendar_at IS NULL
-  AND (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-      BETWEEN ((now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date - interval '2 days')::date
-          AND (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-ORDER BY m.fecha_notificacion;
-```
-
-Si la query devuelve **0 filas**: todo OK, no tocar el reporte.
-
-Si devuelve **> 0 filas**: son candidatos que el skill no agendó pero debería
-haber intentado (salvo los que son `Envío de Comunicación` sin "prestación
-dineraria" en el detalle — esos se filtran silenciosos; y los Acto Administrativo
-sin "Clausura" en detalle). Apendear al reporte:
-
-```python
-# Filtrar los que sí deberían estar agendados (descartar "Envío de Comunicación"
-# y "Acto Administrativo" que no matchean sub-tipos procesables)
-import json
-huerfanos = [h for h in huerfanos_query_result if not (
-    (h['tipo_comunicacion'] == 'Envío de Comunicación' and 'prest' not in (h.get('detalle','') or '').lower())
-    or (h['tipo_comunicacion'] == 'Notificación de Acto Administrativo' and 'Clausura' not in (h.get('detalle','') or ''))
-)]
-if huerfanos:
-    with open('/tmp/reporte.txt','a') as f:
-        f.write('\n\n⚠️ *ALERTA — QUEDARON COMUNICACIONES SIN AGENDAR EN ESTA CORRIDA*\n')
-        f.write('_(Revisar manualmente. Puede ser que el agente se haya salteado items,'
-                ' o que el scraper todavía no haya subido el texto del PDF.)_\n')
-        for h in huerfanos:
-            f.write(f"• {h.get('nombre') or '(sin caso)'} ({h['srt_expediente_nro']}) "
-                    f"{h['tipo_comunicacion']} notif {h['fecha_notif']}\n")
-```
-
-El próximo run (mañana 9am o esta tarde 15:00 AR) los vuelve a intentar.
-
-### Paso 7 — INSERT run (dispara WA al grupo)
-
-```sql
+-- Reemplazá <INICIO_RUN_ISO> por el timestamp que guardaste al inicio del Paso 1.
+-- Reemplazá los jsonb y el entero con los valores de /tmp/errores_min.json, /tmp/sin_grupo_min.json y /tmp/avisos_ok.txt.
 INSERT INTO agendar_comunicaciones_runs (
-  total_procesadas, agendados_hoy, errores, sin_caso_srt, reporte_texto
-) VALUES (
-  $total,
-  $procesadas_jsonb,
-  $errores_jsonb,
-  $sin_tel_jsonb,
-  $reporte_texto
+  ejecutado_at, total_procesadas, agendados_hoy, errores, sin_caso_srt,
+  wa_chat_id, reporte_texto
 )
+SELECT
+  now(),
+  (SELECT COUNT(*) FROM comunicaciones_miventanilla
+   WHERE agendado_en_calendar_at >= '<INICIO_RUN_ISO>'::timestamptz
+     AND agendado_por = 'claude'),
+  (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+     'srt', m.srt_expediente_nro,
+     'tipo_comunicacion', m.tipo_comunicacion,
+     'nombre_actor', c.nombre,
+     'fecha_notif', (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date,
+     'fecha_evento', m.calendar_event_fecha,
+     'event_id', m.calendar_event_id
+   )), '[]'::jsonb)
+   FROM comunicaciones_miventanilla m
+   LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
+   WHERE m.agendado_en_calendar_at >= '<INICIO_RUN_ISO>'::timestamptz
+     AND m.agendado_por = 'claude'),
+  '<ERRORES_JSONB>'::jsonb,
+  '<SIN_GRUPO_JSONB>'::jsonb,
+  '120363407310742955@g.us',
+  fn_armar_reporte_agendar_srt(
+    '<INICIO_RUN_ISO>'::timestamptz,
+    '<ERRORES_JSONB>'::jsonb,
+    '<SIN_GRUPO_JSONB>'::jsonb,
+    <AVISOS_ENVIADOS_INT>
+  )
 RETURNING id, whatsapp_jobid;
 ```
 
-El trigger `trg_agendar_comunicaciones_wa` dispara el envío al grupo Claude SRT via pg_net.
+**Qué hace Postgres atómicamente en esta query:**
+1. Cuenta total_procesadas desde la DB.
+2. Arma el jsonb `agendados_hoy` con los detalles de cada comunicación agendada.
+3. La función `fn_armar_reporte_agendar_srt` recorre la DB y arma el texto
+   completo del reporte: header + bloques por tipo (dictamen, constancia,
+   citación, clausura, homologación) + sin_grupo + errores + post-check
+   huérfanos. Todo en ~4 KB de texto.
+4. Inserta el run.
+5. El trigger `trg_agendar_comunicaciones_wa` dispara `pg_net.http_post` →
+   edge function `wa-send` → WA al grupo Claude SRT.
+6. Devuelve `id` y `whatsapp_jobid`.
+
+El agente solo ve como respuesta una fila con 2 valores: id + jobid. No hay
+cientos de items cargados al contexto. Probabilidad de stream idle timeout: baja.
+
+Si por alguna razón el INSERT devuelve error (SQL syntax, conexión caída,
+etc.), reintentá. Si sigue fallando, al menos todos los eventos de Calendar y
+los UPDATEs de Supabase del Paso 3 ya están persistidos — solo falta el run,
+que se puede insertar manual después.
 
 ### Paso 8 — Confirmar
 
