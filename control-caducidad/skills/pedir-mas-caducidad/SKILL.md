@@ -183,25 +183,84 @@ _Pedido {fecha_HH:MM} · {N} expedientes · pedido por {pedido_por o "ella misma
 2. **Particionar mensajes >3500 chars** en 2-3 mensajes consecutivos prefijados `[Parte 1/3] PEDIDO EXTRA`, etc.
 3. Para la abogada que recibe en su celular (Eliana, Mara): **NO** prefijar con `*[Para: NOMBRE]*`. Para Kuki/Paula que va a Matías: SÍ prefijar.
 
-#### 4.b) Resumen ejecutivo a Matías (1 mensaje corto, siempre va al `5491140439075`)
+#### 4.b) Resumen ejecutivo a Matías — SOLO cuando soy el último pedido de mi corrida
+
+⚠️ **REGLA CRÍTICA:** varios pedidos pueden compartir el mismo `numero_corrida` (cuando desde la app se selecciona multi-abogada, ej. "Pedir 5 para Eliana+Mara" crea 2 pedidos con el mismo numero_corrida). En ese caso, Matías debe recibir **UN SOLO resumen ejecutivo consolidado** al final de la corrida — NO uno por pedido.
+
+**Algoritmo del resumen unificado:**
+
+1. Después de marcar mi pedido como `completado`, chequear si quedan otros pedidos del mismo numero_corrida+fecha sin completar:
+
+```sql
+SELECT COUNT(*)::INT AS n_pendientes
+FROM pedidos_caducidad_pendientes
+WHERE numero_corrida = $mi_numero_corrida
+  AND DATE(creado_at AT TIME ZONE 'America/Argentina/Buenos_Aires') = CURRENT_DATE
+  AND estado NOT IN ('completado','error')
+  AND id <> $mi_pedido_id;
+```
+
+2. Si `n_pendientes > 0`: **NO mandar** el resumen a Matías. Skippear. Otra routine que procese otro pedido de la misma corrida va a mandarlo cuando sea la última.
+
+3. Si `n_pendientes = 0` (soy la última en terminar): armar el resumen consolidado con info de TODOS los pedidos de esta corrida:
+
+```sql
+-- Traer info de todos los pedidos de la corrida
+SELECT id, abogada, jurisdiccion, n, expediente_ids, estado, error_msg, pedido_por
+FROM pedidos_caducidad_pendientes
+WHERE numero_corrida = $numero_corrida
+  AND DATE(creado_at AT TIME ZONE 'America/Argentina/Buenos_Aires') = CURRENT_DATE;
+
+-- Traer info de todos los expedientes procesados (para críticos)
+SELECT expediente_id, responsable_asignada, tipo_impulso, urgencia, critico,
+       estado_procesal, accion_inmediata, borrador_onedrive_url
+FROM caducidad_corridas
+WHERE fecha = CURRENT_DATE AND numero_corrida = $numero_corrida;
+```
+
+Formato del resumen consolidado (va al `5491140439075`):
 
 ```
-*RESUMEN EJECUTIVO PEDIDO EXTRA — {fecha_HH:MM}*
+*RESUMEN CORRIDA EXTRA — {fecha_HH:MM} (corrida #{numero_corrida})*
+_Pedida por: {pedido_por o "las abogadas"}_
 
-👩‍💼 Pedido por: {pedido_por o "{ABOGADA}"}
-📋 Para: {ABOGADA} ({JURISDICCION})
-🔢 N pedidos: {N}
-✅ Procesados OK: {n_ok}
-❌ Fallaron: {n_fail}
+👩‍💼 *Abogadas de la corrida:* {lista, ej: Eliana + Mara}
+📋 *Total expedientes:* {total} ({n por abogada, ej: 5+5})
+✅ *Procesados OK:* {n_ok}
+❌ *Fallaron:* {n_fail}
 
-🚨 Críticos detectados: {n_criticos}
-{lista corta de carátulas críticas}
+🚨 *Críticos detectados:* {total_criticos}
+- Eliana: {n_criticos_eliana} {(lista corta de carátulas si hay)}
+- Mara: {n_criticos_mara} {(lista corta si hay)}
+{...otras abogadas que participaron}
 
-📝 Borradores generados: {n_borradores}
-🔗 Pedido_id: {pedido_id} · numero_corrida: {numero_corrida}
+📝 *Borradores generados:* {n_con_borrador}/{total}
+🔗 *pedido_ids:* {[id1, id2, ...]} · numero_corrida: {numero_corrida}
 ```
 
-Este mensaje a Matías SIEMPRE se envía al `5491140439075`, sin importar quién pidió. Sirve de auditoría — Matías ve qué pidió cada abogada y con qué resultado.
+Si solo hay UNA abogada en la corrida (pedido individual clásico), el formato funciona igual — solo aparece esa abogada en la lista.
+
+**Cómo evitar race condition:** los N pedidos de la corrida son procesados en paralelo por N routines. Si dos terminan "al mismo tiempo", ambas ven `n_pendientes=0` al chequear y ambas mandan resumen. Para evitarlo, usar un lock optimista en la query:
+
+```sql
+-- Claim el "slot" de mandar el resumen via UPDATE atómico
+UPDATE pedidos_caducidad_pendientes
+SET estado = 'completado_y_resumido'
+WHERE id = $mi_pedido_id
+  AND estado = 'completado'
+  AND NOT EXISTS (
+    SELECT 1 FROM pedidos_caducidad_pendientes
+    WHERE numero_corrida = $mi_numero_corrida
+      AND DATE(creado_at AT TIME ZONE 'America/Argentina/Buenos_Aires') = CURRENT_DATE
+      AND estado NOT IN ('completado','completado_y_resumido','error')
+      AND id <> $mi_pedido_id
+  )
+RETURNING id;
+```
+
+Si el UPDATE afecta 0 filas → alguien más ya mandó el resumen, skippeo. Si afecta 1 fila → soy yo el que manda.
+
+Nota: `completado_y_resumido` es un estado nuevo que representa "completado y además mandé el resumen ejecutivo". El CHECK de la tabla `pedidos_caducidad_pendientes` permite este valor — si no está en el CHECK, agregar con ALTER TABLE antes del primer run.
 
 ### Fase 5: Marcar el pedido como completado
 
@@ -274,9 +333,10 @@ Fuera del horario hábil (noche, fin de semana) el cron no corre — si alguien 
 4. Lanzar **N subagentes Opus 4.7 en 1 tanda paralela** (N ≤ 30).
 5. Cada subagente: analiza, genera DOCX, sube a OneDrive, hace UPDATE en `caducidad_corridas`.
 6. Esperar a que terminen todos (con timeout 180 seg por subagente, 1 reintento).
-7. **Mandar 2 mensajes WhatsApp**: uno a la abogada destinataria con los N casos analizados (siguiendo tabla de destinatarios de Fase 4.a), y un resumen ejecutivo a Matías (Fase 4.b) — usar MCP tools `mcp__whatsapp__wa_send_text`, NUNCA helpers Python.
+7. **Mandar WhatsApp a la abogada destinataria** (Fase 4.a) — con los N casos analizados, siguiendo tabla de destinatarios. SIEMPRE. Usar MCP tools `mcp__whatsapp__wa_send_text`, NUNCA helpers Python.
 8. Marcar pedido como `completado` (o `error` si todos fallaron).
-9. Reportar al scheduled trigger: cantidad procesada + cantidad fallida.
+9. **Chequear si soy el último pedido de mi corrida** (Fase 4.b): query a `pedidos_caducidad_pendientes` por `numero_corrida` + fecha. Si hay otros pedidos aún en `pendiente`/`en_proceso`/`completado` (no `completado_y_resumido` ni `error`) → SKIPPEAR el resumen ejecutivo. Si soy la última → armar el resumen **consolidado** con info de TODOS los pedidos de la corrida (puede ser 1 solo si fue pedido individual) y mandarlo a Matías (`5491140439075`). Usar el UPDATE atómico con `NOT EXISTS` para claim el slot sin race.
+10. Reportar al scheduled trigger: cantidad procesada + cantidad fallida + si mandé resumen o no.
 
 Si algún subagente timeout, la fila queda con `analisis_pendiente=true` — el orquestador la deja así y lo registra en `error_msg`.
 
