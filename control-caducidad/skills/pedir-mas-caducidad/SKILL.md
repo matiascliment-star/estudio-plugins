@@ -141,7 +141,15 @@ WHERE fecha = CURRENT_DATE
   AND analisis_pendiente = true;  -- safety: no pisar una corrida de 7am ya analizada
 ```
 
-### Fase 4: WhatsApp — abogada destinataria + resumen ejecutivo a Matías
+### Fase 4: WhatsApp — SOLO si `pedido.origen = 'auto'`
+
+⚠️ **BRANCH CRÍTICO:** leer `pedidos_caducidad_pendientes.origen` del pedido que estás procesando.
+
+**Si `origen = 'manual'`:** el pedido vino de la solapa "Impulso IA" — un humano (Matías/Noe/abogada) eligió los expediente_ids explícitamente y está mirando la app para ver los resultados. **NO mandes WhatsApp** a nadie (ni a la abogada, ni resumen ejecutivo a Matías). La notificación es que la app ve los stubs pasar de `analisis_pendiente=true` a `false` con su análisis completo y link al borrador. Saltá directo a Fase 5 (marcar completado).
+
+**Si `origen = 'auto'` (o NULL legacy):** es un pedido del botón "Pedir más casos" automático, seguir este flujo completo con los 2 mensajes.
+
+---
 
 Cuando los N subagentes terminaron, mandar **2 mensajes** (NO mandar mientras se procesa, solo al final):
 
@@ -361,15 +369,16 @@ Fuera del horario hábil (noche, fin de semana) el cron no corre — si alguien 
 ## Resumen para el agente orquestador (Opus 4.7)
 
 1. Consumir cola con UPDATE + FOR UPDATE SKIP LOCKED. Si no hay pendientes, salir.
-2. Traer datos de los N expedientes (los IDs ya vienen en el pedido).
-3. Cargar `../corrida-caducidad-diaria/reglas-procesales.md` a memoria local.
-4. Lanzar **N subagentes Opus 4.7 en 1 tanda paralela** (N ≤ 30).
-5. Cada subagente: analiza, genera DOCX, sube a OneDrive, hace UPDATE en `caducidad_corridas`.
-6. Esperar a que terminen todos (con timeout 180 seg por subagente, 1 reintento).
-7. **Mandar WhatsApp a la abogada destinataria** (Fase 4.a) — con los N casos analizados, siguiendo tabla de destinatarios. SIEMPRE. Usar MCP tools `mcp__whatsapp__wa_send_text`, NUNCA helpers Python.
-8. Marcar pedido como `completado` (o `error` si todos fallaron).
-9. **Chequear si soy el último pedido de mi corrida** (Fase 4.b): query a `pedidos_caducidad_pendientes` por `numero_corrida` + fecha. Si hay otros pedidos aún en `pendiente`/`en_proceso`/`completado` (no `completado_y_resumido` ni `error`) → SKIPPEAR el resumen ejecutivo. Si soy la última → armar el resumen **consolidado** con info de TODOS los pedidos de la corrida (puede ser 1 solo si fue pedido individual) y mandarlo a Matías (`5491140439075`). Usar el UPDATE atómico con `NOT EXISTS` para claim el slot sin race.
-10. Reportar al scheduled trigger: cantidad procesada + cantidad fallida + si mandé resumen o no.
+2. Leer `pedido.origen` (`auto` o `manual`).
+3. Traer datos de los N expedientes (los IDs ya vienen en el pedido).
+4. Cargar `../corrida-caducidad-diaria/reglas-procesales.md` a memoria local.
+5. Lanzar **N subagentes Opus 4.7 en 1 tanda paralela** (N ≤ 30).
+6. Cada subagente: analiza, genera DOCX, sube a OneDrive **vía GitHub relay**, hace UPDATE en `caducidad_corridas`.
+7. Esperar a que terminen todos (con timeout 180 seg por subagente, 1 reintento).
+8. **Si `origen = 'auto'`:** mandar WhatsApp a la abogada destinataria (Fase 4.a) — con los N casos analizados. SIEMPRE usar MCP tools `mcp__whatsapp__wa_send_text`, NUNCA helpers Python. **Si `origen = 'manual'`:** saltar este paso (la persona mira la app).
+9. Marcar pedido como `completado` (o `error` si todos fallaron).
+10. **Si `origen = 'auto'`:** chequear si soy el último pedido de mi corrida (Fase 4.b) — query `pedidos_caducidad_pendientes` por `numero_corrida`+fecha. Solo contar pedidos con `origen='auto'` (los manuales no cuentan para el resumen). Si hay otros auto pendientes → SKIPPEAR resumen. Si soy el último → resumen consolidado a Matías con UPDATE atómico `NOT EXISTS` para evitar race. **Si `origen = 'manual'`:** saltar totalmente el resumen.
+11. Reportar al scheduled trigger: cantidad procesada + fallida + `origen` + si mandé WA/resumen o no.
 
 Si algún subagente timeout, la fila queda con `analisis_pendiente=true` — el orquestador la deja así y lo registra en `error_msg`.
 
