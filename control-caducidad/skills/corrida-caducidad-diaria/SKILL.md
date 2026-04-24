@@ -5,7 +5,7 @@ description: >
   20 expedientes CABA + 20 Provincia más urgentes, analiza cada uno con un subagente
   (lee movimientos, resumen_ia y reglas procesales), genera borradores DOCX para
   escritos de fórmula, los sube a OneDrive (CABA) y MEV (Pcia), y manda 4 mensajes de
-  WhatsApp (uno por chica: Eliana, Mara, Kuki, Paula) + un mensaje resumen a Matías
+  WhatsApp (uno por abogada: Eliana, Mara, Kuki, Paula) + un mensaje resumen a Matías
   con los CRÍTICOS del día. Destinada a correr todos los días hábiles a las 7:00 AR
   para que las empleadas tengan todo listo al llegar a las 8.
   Triggers: "corrida caducidad", "control caducidad diario", "caducidad del día",
@@ -98,13 +98,13 @@ ranked AS (
 SELECT id, numero, caratula, jurisdiccion, estado, instancia_actual,
        fecha_ref, plazo, (CURRENT_DATE - fecha_ref) AS diff_dias, dr,
        mev_idc, mev_ido, link_causa, resumen_ia, onedrive_id, onedrive_url
-FROM ranked WHERE rn <= CASE WHEN jurisdiccion='CABA' THEN 20 ELSE 30 END
+FROM ranked WHERE rn <= 20
 ORDER BY jurisdiccion, rn;
 ```
 
-**Dedup:** si dos filas tienen el mismo `numero`, quedarse con el primero. Si tras dedup hay <20 CABA o <30 Pcia, traer los siguientes con otra query hasta completar.
+**Dedup:** si dos filas tienen el mismo `numero`, quedarse con el primero. Si tras dedup hay <20 CABA o <20 Pcia, traer los siguientes con otra query hasta completar.
 
-### Fase 2: Lanzar 50 subagentes Opus en tandas paralelas de 10
+### Fase 2: Lanzar 40 subagentes Opus en tandas paralelas de 10
 
 Cada subagente **Opus 4.7** recibe:
 - Metadata del expediente (id, numero, caratula, jurisdiccion, estado, instancia, dr, plazo, fecha_ref).
@@ -291,26 +291,36 @@ Devuelve JSON `{"webUrl": "...", "id": "...", "name": "..."}`. Usar `webUrl` com
 
 ### Fase 5: Armado y envío de WhatsApp
 
-**5 mensajes por chica (Eliana, Mara, Kuki, Paula, Clara) + 1 mensaje ejecutivo a Matías.**
+**4 mensajes (uno por abogada: Eliana, Mara, Kuki, Paula) + 1 mensaje ejecutivo a Matías.**
 
 ⚠️ **REGLA DURA — anti idle-timeout (lección 2026-04-22):**
 
-En la corrida del 2026-04-22 la sesión de Claude se cortó con `Stream idle timeout - partial response received` justo antes de enviar los WhatsApp. La causa fue que, en vez de mandar los WA directo con las MCP tools, el orquestador se puso a escribir un **helper Python local** que juntaba los 50 registros de Supabase, formateaba los 5 mensajes enormes en memoria y recién ahí llamaba al MCP. El stream estuvo silencioso >60 seg mientras razonaba el código del helper y el gateway cerró la conexión. Resultado: se generaron los 12 DOCX, se subieron a OneDrive, se loguearon las 50 filas en `caducidad_corridas` — pero las chicas no recibieron nada.
+En la corrida del 2026-04-22 la sesión de Claude se cortó con `Stream idle timeout - partial response received` justo antes de enviar los WhatsApp. La causa fue que, en vez de mandar los WA directo con las MCP tools, el orquestador se puso a escribir un **helper Python local** que juntaba los 40 registros de Supabase, formateaba los mensajes enormes en memoria y recién ahí llamaba al MCP. El stream estuvo silencioso >60 seg mientras razonaba el código del helper y el gateway cerró la conexión. Resultado: se generaron los DOCX, se subieron a OneDrive, se loguearon las filas en `caducidad_corridas` — pero las abogadas no recibieron nada.
 
 **Cómo evitarlo:**
 
 1. **Nunca escribir helpers Python ad-hoc para mandar WA.** Los mensajes se arman en el prompt (en memoria del agente) y se mandan **uno por uno** con las MCP tools `mcp__whatsapp__wa_send_text` y `mcp__whatsapp__wa_send_document`. Un tool call por mensaje. Nada de scripts intermedios, pipelines, ni edge functions llamadas desde Python.
 2. **Mandar incremental, no al final.** Apenas se completan las tandas de una chica, mandar su WA. Ej: al cerrar tanda 2 (CABA 6-10), ya sale el WA de Eliana. Si la sesión se corta después, no se pierde todo — solo lo que quedó pendiente.
 3. **Particionar mensajes largos.** Si un WA supera ~3500 caracteres (o ~6-7 expedientes con el bloque estructurado completo), partirlo en 2-3 mensajes consecutivos: `[Parte 1/3] 🚨 CRÍTICOS`, `[Parte 2/3] PENDIENTES 1-4`, `[Parte 3/3] PENDIENTES 5-N`. Mejor 3 WA cortos que 1 gigante que obligue al modelo a razonar 30 seg antes del primer token.
-4. **No acumular contexto innecesario.** Traer los datos estructurados de cada chica con query acotada (`WHERE responsable_asignada = 'X' AND fecha = ...`) — no traer las 50 filas a memoria del orquestador.
+4. **No acumular contexto innecesario.** Traer los datos estructurados de cada abogada con query acotada (`WHERE responsable_asignada = 'X' AND fecha = ...`) — no traer las 40 filas a memoria del orquestador.
 5. **Cuando manda el mensaje a Matías (resumen ejecutivo), hacerlo al final y conciso** — un solo WA, solo contadores y lista de críticos, no re-explayar los análisis.
 
-**Destinatarios durante prueba:** todo al `5491140439075`. Cada WA se prefija con `*[Para: NOMBRE]*` en el primer renglón para que Matías sepa a quién se habría enviado en producción.
+**Destinatarios (vigente desde 2026-04-24):**
 
-Estructura del mensaje por chica:
+| Destinataria | Número WhatsApp |
+|---|---|
+| Eliana | `5491155681611` (su celular — producción) |
+| Mara | `5491150547137` (su celular — producción) |
+| Kuki | `5491140439075` (Matías — todavía no tenemos su número) |
+| Paula | `5491140439075` (Matías — todavía no tenemos su número) |
+| Resumen ejecutivo | `5491140439075` (Matías) |
+
+Los WA que van a Matías (Kuki, Paula y resumen ejecutivo) deben prefijar el primer renglón con `*[Para: NOMBRE]*` para que sepa a quién iba dirigido. Los que van a Eliana/Mara NO llevan prefijo (va directo a ellas).
+
+Estructura del mensaje por abogada:
 
 ```
-*CONTROL CADUCIDAD — {CHICA} ({JURISDICCION})*
+*CONTROL CADUCIDAD — {ABOGADA} ({JURISDICCION})*
 _Corrida {fecha} · {N} expedientes_
 
 🚨 *CRÍTICOS DEL DÍA* ({M} casos)
@@ -338,7 +348,7 @@ _Corrida {fecha} · {N} expedientes_
 
 Cuando un campo no aplica al estado del expediente (ej. ejecución no tiene "prueba pendiente"), se omite ese bloque en el mensaje.
 
-**Regla de oro:** que la chica pueda leer solo el bloque de un expediente y entender sin abrir el expediente todo: dónde está, qué prueba falta, quién está en mora, qué estrategia conviene, y qué hacer hoy.
+**Regla de oro:** que la abogada pueda leer solo el bloque de un expediente y entender sin abrir el expediente todo: dónde está, qué prueba falta, quién está en mora, qué estrategia conviene, y qué hacer hoy.
 
 Estructura del mensaje ejecutivo a Matías:
 
@@ -359,7 +369,7 @@ Estructura del mensaje ejecutivo a Matías:
 - Excluidos del control sugeridos: {n}
 ```
 
-**Durante fase de prueba, TODOS los WA van al `5491140439075` (Matías)** etiquetados con el nombre de la destinataria esperada. Cuando Matías apruebe la calidad, cambiar a los JIDs reales de cada chica.
+**Routing final (ver tabla de destinatarios más arriba):** Eliana y Mara reciben directo en su celular. Kuki, Paula y el resumen ejecutivo van a Matías (`5491140439075`) con prefijo `*[Para: NOMBRE]*`.
 
 ### Fase 6: Logueo en Supabase
 
@@ -395,7 +405,7 @@ CREATE TABLE IF NOT EXISTS caducidad_corridas (
   numero_corrida INT,               -- secuencial dentro del día (1, 2, ...)
   hora_inicio TIMESTAMPTZ,          -- timestamp del batch (compartido por todas las filas de la corrida)
   expediente_id BIGINT REFERENCES expedientes(id),
-  responsable_asignada TEXT,        -- Eliana/Mara/Kuki/Paula/Clara
+  responsable_asignada TEXT,        -- Eliana/Mara/Kuki/Paula
   jurisdiccion TEXT,                -- 'CABA' | 'Provincia'
   dr INT,                           -- días restantes
   tipo_impulso TEXT,
@@ -479,18 +489,19 @@ Cada subagente al finalizar inserta su fila. Así tenemos auditoría completa y 
 
 ## Destinatarios WhatsApp
 
-Durante prueba → todo al `5491140439075` (Matías).
+Vigente desde **2026-04-24**:
 
-Para producción:
 ```
-Eliana → 5491155681611
-Mara   → 5491150547137
-Kuki   → 549XX...      (pedir a Matías)
-Paula  → 549XX...      (pedir a Matías)
-Clara  → 549XX...      (pedir a Matías)
+Eliana            → 5491155681611   (producción — directo a ella)
+Mara              → 5491150547137   (producción — directo a ella)
+Kuki              → 5491140439075   (a Matías — todavía no tenemos su número)
+Paula             → 5491140439075   (a Matías — todavía no tenemos su número)
+Resumen ejecutivo → 5491140439075   (a Matías)
 ```
 
-Guardar en `reference_caducidad_asignaciones.md` en memoria.
+Los mensajes que van a Matías (Kuki, Paula, resumen ejecutivo) **deben** llevar el prefijo `*[Para: NOMBRE]*` en la primera línea. Los de Eliana/Mara NO llevan prefijo.
+
+Cuando consigamos los números de Kuki y Paula, actualizar este archivo y sacarles el prefijo.
 
 **Instance WhatsApp activo:** consultar con `SELECT instance_id FROM wa_messages ORDER BY created_at DESC LIMIT 1` (suele rotar). Actualmente `inst_d9c22079`.
 
@@ -507,13 +518,13 @@ Trigger diario **7:00 AR** (= 10:00 UTC) de **lunes a viernes**. Crear con skill
 ## Resumen para el agente orquestador (Opus 4.7)
 
 1. Leer `reglas-procesales.md` y cargarlo a memoria local — se inyecta literal en cada subagente.
-2. Ejecutar query de Fase 1, deduplicar, obtener 20 CABA + 30 Pcia = 50 filas.
+2. Ejecutar query de Fase 1, deduplicar, obtener 20 CABA + 20 Pcia = 40 filas.
 3. Asignar por orden:
    - CABA top 1–10 → Eliana, 11–20 → Mara.
-   - Pcia top 1–10 → Kuki, 11–20 → Paula, 21–30 → Clara.
-4. Lanzar **50 subagentes Opus 4.7** en **tandas de 10 paralelos**. Cada subagente devuelve JSON con análisis estructurado.
+   - Pcia top 1–10 → Kuki, 11–20 → Paula.
+4. Lanzar **40 subagentes Opus 4.7** en **tandas de 10 paralelos** (4 tandas). Cada subagente devuelve JSON con análisis estructurado.
 5. Consolidar resultados. Identificar CRÍTICOS.
-6. Generar **5 mensajes WA** (uno por chica) + 1 mensaje resumen Matías.
+6. Generar **4 mensajes WA** (uno por abogada) + 1 mensaje resumen Matías, siguiendo la tabla de destinatarios: Eliana y Mara directo a su celular; Kuki, Paula y resumen ejecutivo a Matías con prefijo `*[Para: NOMBRE]*`.
 7. Enviar con edge function `wa-send` vía `pg_net.http_post`.
 8. Insertar filas en `caducidad_corridas`.
 9. Reportar al scheduled trigger el total procesado.
@@ -521,10 +532,10 @@ Trigger diario **7:00 AR** (= 10:00 UTC) de **lunes a viernes**. Crear con skill
 ## Tiempo esperado
 
 - Query Supabase: 2 seg
-- 50 subagentes Opus en tandas de 10 × ~120 seg promedio (análisis profundo) = **5 tandas × 2 min = 10 min**
+- 40 subagentes Opus en tandas de 10 × ~120 seg promedio (análisis profundo) = **4 tandas × 2 min = 8 min**
 - Generación DOCX + uploads: integrado en cada subagente
-- 6 WA envíos: 5 seg
-- **Total estimado: 12-15 min end-to-end.**
+- 5 WA envíos: 5 seg
+- **Total estimado: 10-12 min end-to-end.**
 
 Corrida diaria a las **7:00 AR** — termina ~7:15, las chicas llegan a las 8 y ya lo tienen listo.
 
