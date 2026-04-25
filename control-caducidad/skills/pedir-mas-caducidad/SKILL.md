@@ -141,27 +141,53 @@ WHERE fecha = CURRENT_DATE
   AND analisis_pendiente = true;  -- safety: no pisar una corrida de 7am ya analizada
 ```
 
-### Fase 3.5: Caso especial — expediente en ejecución (origen='manual')
+### Fase 3.5: Selección del set de modelos según etapa del expediente
 
-⚠️ **REGLA IMPORTANTE — solo aplica cuando `pedido.origen = 'manual'`:**
+⚠️ **CRÍTICO — el subagente debe elegir el set de modelos correcto según el estado del expediente:**
 
-Si el subagente detecta que el expediente está en **estados 70-76** (ejecución / liquidación), NO debe intentar generar un DOCX de fórmula. La razón: el escrito de impulso para esos casos es típicamente "practicar liquidación" o "presentar liquidación reformulada", que requiere **cálculos** (capital + intereses con Acta CNAT + UMAs + RIPTE + IPC) — no un template. Eso lo hace el skill `practicar-liquidacion`, que es **interactivo** (necesita confirmación humana sobre capital, fecha sentencia, tasa aplicable) y por lo tanto NO se invoca en automático para evitar errores de inferencia.
+| Estado del expediente | Set de modelos a usar | Path |
+|---|---|---|
+| **70-76 (ejecución)** | `control-liquidacion` | `estudio-plugins/control-liquidacion/skills/corrida-liquidacion-diaria/modelos/` |
+| Otros (caducidad pura) | `control-caducidad` | `estudio-plugins/control-caducidad/skills/corrida-caducidad-diaria/modelos/` |
 
-**Comportamiento esperado del subagente:**
-
-1. Analizar el expediente normalmente (popular `estado_procesal`, `prueba_producida`, `prueba_pendiente`, `obstaculo_actual`, `estrategia_sugerida`, `accion_inmediata` con su mejor juicio).
-2. **NO generar DOCX.** Setear `tipo_impulso = "ejecucion-requiere-practicar-liquidacion"`, `borrador_onedrive_url = NULL`, `urgencia = "media"` (a menos que detecte algo más urgente).
-3. **Setear `texto_sugerido` con una nota específica** explicando qué skill usar:
+#### Modelos disponibles en `control-liquidacion` (estados 70-76)
 
 ```
-⚠️ Este expediente está en ejecución (estado {NN}). El escrito que corresponde
-es {tipo concreto: practicar liquidación / presentar liquidación reformulada /
-intimar pago / pedir embargo / etc.} y requiere CÁLCULOS (capital + intereses
-+ UMAs + RIPTE).
+intimar-pago-deposito.md           → tipo_impulso: intimar_pago_deposito
+pedir-embargo.md                   → tipo_impulso: pedir_embargo
+pedir-regulacion-honorarios.md     → tipo_impulso: pedir_regulacion_honorarios
+pronto-despacho-aprobacion.md      → tipo_impulso: pronto_despacho_aprobacion
+pronto-despacho-regulacion.md      → tipo_impulso: pronto_despacho_regulacion
+reiterar-giro.md                   → tipo_impulso: reiterar_giro
+```
 
-Para generarlo: invocá el skill `practicar-liquidacion` desde Claude Code
-manualmente (Matías o Noe), confirmando capital y tasa aplicable. NO se hace
-automático para evitar errores de inferencia.
+Si el subagente identifica que la acción inmediata es **uno de estos 6 tipos**,
+DEBE generar DOCX usando el modelo correspondiente de `control-liquidacion`
+(igual que la corrida diaria de liquidación lo hace), guardando en
+`caducidad-borradores/YYYY-MM-DD/{tipo}-{APELLIDO}.docx` y subiéndolo via
+GitHub relay como cualquier otro DOCX.
+
+#### Caso "requiere practicar-liquidacion" — sin DOCX automático
+
+Si la acción inmediata es **practicar liquidación, presentar liquidación
+reformulada, liquidar intereses, o impugnar liquidación con cálculo**,
+el subagente NO genera DOCX automático. Eso requiere `practicar-liquidacion`
+(skill interactivo con cálculos de capital + intereses con Acta CNAT + UMAs
++ RIPTE) que necesita **confirmación humana** sobre capital y tasa, y por
+lo tanto NO se invoca en automático para evitar liquidaciones mal calculadas.
+
+En esos casos:
+1. Hacer el análisis textual completo igual (`estado_procesal`, `prueba_producida`,
+   `prueba_pendiente`, `obstaculo_actual`, `estrategia_sugerida`, `accion_inmediata`).
+2. Setear `tipo_impulso = "requiere-practicar-liquidacion"`, `borrador_onedrive_url = NULL`.
+3. Popular `texto_sugerido` con guía:
+
+```
+⚠️ Este expediente requiere CÁLCULOS (capital + intereses + UMAs + RIPTE).
+
+Para generar el escrito: invocá el skill `practicar-liquidacion` desde Claude
+Code manualmente (Matías o Noe), confirmando capital y tasa aplicable. NO se
+hace automático para evitar errores de inferencia.
 
 Datos clave detectados del expediente:
 - Capital de condena: {monto si lo encontró, sino "no detectado"}
@@ -170,14 +196,26 @@ Datos clave detectados del expediente:
 - Última liquidación: {monto y fecha si hay, sino "ninguna previa"}
 ```
 
-4. En el WhatsApp (si origen='auto' que igual NO es este caso) o en la app
-   (origen='manual'), la abogada/Matías ve el análisis y el `texto_sugerido`
-   con la guía, y decide si invoca `practicar-liquidacion` ahí mismo.
+#### Caso "no-fórmula sustantivo" — solo sugerir
 
-**Esto solo aplica a `origen='manual'`** (la solapa Impulso IA, donde el usuario
-elige el expediente). En `origen='auto'` (corrida 7am, pedir-mas-caducidad
-automático), los expedientes en estados 70-76 ya quedan filtrados en la query
-Fase 1 (los maneja el plugin `control-liquidacion`).
+Para tipos como `alegar`, `interponer-rex`, `contestar-traslado-sustancial`,
+no hay template — el escrito requiere redacción experta. Setear
+`tipo_impulso = "{tipo}"`, `borrador_onedrive_url = NULL`, y en
+`texto_sugerido` describir qué hay que redactar y los puntos clave.
+
+#### Resumen por estado
+
+| Estado | Acción del subagente |
+|---|---|
+| 70-76 + tipo de fórmula de ejecución (6 disponibles) | Generar DOCX con `control-liquidacion/modelos/` |
+| 70-76 + practicar/liquidar/impugnar liquidación | Sin DOCX, nota para usar `practicar-liquidacion` manual |
+| Otros estados + tipo de fórmula de caducidad (9 disponibles) | Generar DOCX con `control-caducidad/modelos/` |
+| Cualquier estado + sustantivo (alegar, REX, etc.) | Sin DOCX, solo sugerencia textual |
+
+**Nota:** este branch aplica TANTO a `origen='auto'` como a `origen='manual'`.
+En la corrida diaria automática los expedientes 70-76 ya están filtrados (los
+maneja `corrida-liquidacion-diaria`), así que en la práctica solo se activa
+en pedidos manuales (Impulso IA).
 
 ### Fase 4: WhatsApp — SOLO si `pedido.origen = 'auto'`
 
