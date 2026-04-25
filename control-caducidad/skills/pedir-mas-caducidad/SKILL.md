@@ -141,6 +141,44 @@ WHERE fecha = CURRENT_DATE
   AND analisis_pendiente = true;  -- safety: no pisar una corrida de 7am ya analizada
 ```
 
+### Fase 3.5: Caso especial — expediente en ejecución (origen='manual')
+
+⚠️ **REGLA IMPORTANTE — solo aplica cuando `pedido.origen = 'manual'`:**
+
+Si el subagente detecta que el expediente está en **estados 70-76** (ejecución / liquidación), NO debe intentar generar un DOCX de fórmula. La razón: el escrito de impulso para esos casos es típicamente "practicar liquidación" o "presentar liquidación reformulada", que requiere **cálculos** (capital + intereses con Acta CNAT + UMAs + RIPTE + IPC) — no un template. Eso lo hace el skill `practicar-liquidacion`, que es **interactivo** (necesita confirmación humana sobre capital, fecha sentencia, tasa aplicable) y por lo tanto NO se invoca en automático para evitar errores de inferencia.
+
+**Comportamiento esperado del subagente:**
+
+1. Analizar el expediente normalmente (popular `estado_procesal`, `prueba_producida`, `prueba_pendiente`, `obstaculo_actual`, `estrategia_sugerida`, `accion_inmediata` con su mejor juicio).
+2. **NO generar DOCX.** Setear `tipo_impulso = "ejecucion-requiere-practicar-liquidacion"`, `borrador_onedrive_url = NULL`, `urgencia = "media"` (a menos que detecte algo más urgente).
+3. **Setear `texto_sugerido` con una nota específica** explicando qué skill usar:
+
+```
+⚠️ Este expediente está en ejecución (estado {NN}). El escrito que corresponde
+es {tipo concreto: practicar liquidación / presentar liquidación reformulada /
+intimar pago / pedir embargo / etc.} y requiere CÁLCULOS (capital + intereses
++ UMAs + RIPTE).
+
+Para generarlo: invocá el skill `practicar-liquidacion` desde Claude Code
+manualmente (Matías o Noe), confirmando capital y tasa aplicable. NO se hace
+automático para evitar errores de inferencia.
+
+Datos clave detectados del expediente:
+- Capital de condena: {monto si lo encontró, sino "no detectado"}
+- Fecha sentencia: {fecha si la encontró}
+- Tasa aplicable según sentencia: {acta CNAT detectada / "no detectada"}
+- Última liquidación: {monto y fecha si hay, sino "ninguna previa"}
+```
+
+4. En el WhatsApp (si origen='auto' que igual NO es este caso) o en la app
+   (origen='manual'), la abogada/Matías ve el análisis y el `texto_sugerido`
+   con la guía, y decide si invoca `practicar-liquidacion` ahí mismo.
+
+**Esto solo aplica a `origen='manual'`** (la solapa Impulso IA, donde el usuario
+elige el expediente). En `origen='auto'` (corrida 7am, pedir-mas-caducidad
+automático), los expedientes en estados 70-76 ya quedan filtrados en la query
+Fase 1 (los maneja el plugin `control-liquidacion`).
+
 ### Fase 4: WhatsApp — SOLO si `pedido.origen = 'auto'`
 
 ⚠️ **BRANCH CRÍTICO:** leer `pedidos_caducidad_pendientes.origen` del pedido que estás procesando.
