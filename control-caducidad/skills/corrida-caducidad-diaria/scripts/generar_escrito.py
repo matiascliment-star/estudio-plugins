@@ -24,10 +24,22 @@ import re
 import sys
 from pathlib import Path
 
-# Importar el helper canónico
-HELPER_DIR = os.path.expanduser(
-    '~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts'
-)
+# Importar el helper canónico — buscar formato_escrito.py subiendo el árbol
+# desde la ubicación de este script. Esto evita depender del symlink en
+# ~/.claude/plugins/marketplaces/ (ruta sensitive en CCR remote sandboxes que
+# pide permiso aunque esté en el allowlist) y funciona igual local que remoto.
+def _find_helper_dir():
+    p = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        cand = os.path.join(p, 'escritos-judiciales', 'scripts', 'formato_escrito.py')
+        if os.path.isfile(cand):
+            return os.path.dirname(cand)
+        np = os.path.dirname(p)
+        if np == p:
+            return os.path.expanduser('~/.claude/plugins/marketplaces/estudio-plugins/escritos-judiciales/scripts')
+        p = np
+
+HELPER_DIR = _find_helper_dir()
 sys.path.insert(0, HELPER_DIR)
 
 from formato_escrito import (  # noqa: E402
