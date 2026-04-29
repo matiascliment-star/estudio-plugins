@@ -292,6 +292,8 @@ Imprimir en stdout (en cualquier modo):
 
 Configurado para correr **lunes a viernes 8:00, 12:00 y 16:00 AR** vía Anthropic remote trigger (id `trig_014d19paikE3KzRpCkQYPsMd`, cron `0 11,15,19 * * 1-5` UTC). El prompt remoto invoca esta skill por nombre y el branching por hora se resuelve adentro de la skill (modo COMPLETO a las 8, INCREMENTAL en las otras dos).
 
+**Modelo:** `claude-opus-4-7-1m` (Opus 4.7 con 1M de contexto). Elegido sobre Sonnet 4.6 para clasificación más fina de mensajes ambiguos y mejor manejo de hilos largos.
+
 ## Edge cases
 
 - **Instancia WA caída**: si `wa_send_*` retorna error de instancia, abortar inmediatamente y mandar alerta al grupo TRABAJO de que el bot no anduvo.
