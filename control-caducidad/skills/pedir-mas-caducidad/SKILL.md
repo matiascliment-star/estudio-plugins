@@ -110,6 +110,10 @@ Cada subagente:
 4. Sube el DOCX a OneDrive usando `../corrida-caducidad-diaria/scripts/upload_onedrive.py`.
 5. Actualiza `resumen_ia` en `expedientes` (siguiendo el mismo template de `resumir-supabase` — idéntico a la corrida diaria).
 
+⚠️ **REGLA DURA — usar SIEMPRE el script, NUNCA improvisar** (paso 3): la única forma válida de generar el DOCX es ejecutando `python3 ../corrida-caducidad-diaria/scripts/generar_escrito.py --modelo X --caratula Y --numero Z --placeholders '{...}' --output ...`. **Prohibido escribir python-docx inline, importar `from docx import Document` directo, o cualquier otra forma de crear el .docx.** Historial 2026-04-29: subagentes improvisaron docx inline para varios escritos (especialmente Provincia: `pronto-despacho-GOGORZA.docx` salió con título centrado sin subrayado y sin sangrías) — el script genera el formato canónico del estudio (TNR 12pt, márgenes 2/2/3/2, título justificado bold+underline, sangría 1.25/1.5 cm, encabezado tribunal a la izquierda), los improvisados rompen la spec.
+
+El orquestador debe incluir en el prompt de cada subagente la instrucción explícita de usar el script y la prohibición de python-docx inline. Si el script falla (modelo inexistente, placeholders sin valor, etc.): abortar el subagente con `tipo_impulso='error_generacion'` y `contexto="⚠️ Script falló: <mensaje>"` — **NO** improvisar el DOCX como fallback.
+
 ### Fase 3: UPDATE (no INSERT) en `caducidad_corridas`
 
 Cada subagente al finalizar hace **UPDATE** sobre su fila stub:
