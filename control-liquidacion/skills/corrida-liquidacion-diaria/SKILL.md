@@ -307,8 +307,9 @@ El subagente debe:
 
 ### Fase 4: Generación del DOCX
 
-Idéntico a caducidad: usa `scripts/generar_escrito.py` con el modelo
-correspondiente. El script importa el formato canónico desde
+⚠️ **REGLA DURA — usar SIEMPRE el script, NUNCA improvisar**: ejecutar `python3 scripts/generar_escrito.py --modelo X --caratula Y --numero Z --placeholders '{...}' --output /tmp/...`. **Prohibido escribir python-docx inline, importar `from docx import Document` directo, o crear el .docx por cualquier otra vía.** Historial 2026-04-29: subagentes improvisaron docx inline para varios escritos (especialmente Provincia) y salieron con título centrado sin subrayado y sin sangrías — rompe la spec del estudio. El orquestador debe incluir en el prompt de cada subagente la instrucción explícita de usar el script. Si el script falla (modelo inexistente, placeholders sin valor, etc.): abortar con `tipo_impulso='error_generacion'`, **NO** improvisar como fallback.
+
+El script importa el formato canónico desde
 `escritos-judiciales/scripts/formato_escrito.py` (Times New Roman 12 pt,
 interlineado 1.5, márgenes 2/2/3/2, sangría 1.25 cm, título justificado
 negrita+subrayado, encabezado tribunal a la izquierda). Spec completa:

@@ -246,7 +246,11 @@ Esta actualización corre DESPUÉS de devolver el JSON del análisis, como últi
 
 ### Fase 3: Generación del DOCX
 
-Los subagentes usan `scripts/generar_escrito.py` que:
+⚠️ **REGLA DURA — usar SIEMPRE el script, NUNCA improvisar**: la única forma válida de generar el DOCX es ejecutando `python3 scripts/generar_escrito.py --modelo X --caratula Y --numero Z --placeholders '{...}' --output /tmp/...`. **Está prohibido escribir python-docx inline, usar `from docx import Document` directamente, o cualquier otra forma de crear el .docx.** Historial 2026-04-29: subagentes improvisaron docx inline para varios escritos de Provincia (`pronto-despacho-GOGORZA.docx` salió con título centrado sin subrayado y sin sangrías) — el script genera el formato canónico correcto, los improvisados rompen la spec del estudio.
+
+Cuando el orquestador lance un subagente, **debe incluir en el prompt del subagente la instrucción explícita de ejecutar `python3 scripts/generar_escrito.py` con los args que correspondan** y la prohibición de improvisar. Si el script falla (modelo inexistente, placeholders sin valor, error de python-docx, etc.): abortar el subagente con `tipo_impulso='error_generacion'` y `contexto="⚠️ Script falló: <mensaje>"` — **NO** improvisar el DOCX como fallback.
+
+El script:
 1. Carga el modelo `modelos/{tipo_impulso}.md` (texto con placeholders).
 2. Reemplaza `{{placeholders}}` con datos del caso.
 3. Genera DOCX usando el helper canónico `escritos-judiciales/scripts/formato_escrito.py` (Times New Roman 12 pt, interlineado 1.5, márgenes 2/2/3/2, sangría 1.25 cm, título justificado negrita+subrayado, encabezado tribunal a la izquierda, párrafo letrado con sangría 1.5 cm y nombre/carátula en negrita, secciones con sangría 1.25 cm y línea en blanco antes). Spec completa en `escritos-judiciales/references/formato-escrito.md`.
