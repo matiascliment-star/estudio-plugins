@@ -113,13 +113,49 @@ FROM ultimo_por_grupo
 WHERE staff_name IS NULL;
 ```
 
-### Paso 2 — Leer contexto completo
+### Paso 2 + 3 — Leer contexto completo y clasificar (CON SUBAGENTES, EN PARALELO)
 
-Para cada grupo pendiente, traer todos los mensajes de `ultima_fecha`. Esto da el hilo completo del último día de actividad para clasificar bien.
+⚠️ **No hacer bulk SELECT** sobre todos los `chat_id` a la vez. Si traés mensajes de muchos grupos en una query, el resultado supera el límite de tokens y el orquestador se ve forzado a recortar a 5 mensajes por chat (clasificación pobre).
 
-### Paso 3 — Clasificar con LLM
+**Patrón correcto:** lanzar `Task()` en paralelo (max 10 concurrentes), uno por grupo pendiente. **Cada subagente** hace SU PROPIA query SQL y clasifica de forma independiente:
 
-Buckets (mutuamente excluyentes):
+```
+Para cada chat_id en la lista del Paso 1:
+  Task(prompt="""
+    Sos un clasificador de chat de WhatsApp. Tu trabajo:
+
+    1. Ejecutá esta query (Supabase MCP, project_id=wdgdbbcwcrirpnfdmykh):
+       SELECT m.*, p.transcripcion
+       FROM wa_messages m
+       LEFT JOIN wa_media_procesado p ON p.message_id = m.id
+       WHERE m.chat_id = '{chat_id}' AND m.created_at::date = '{ultima_fecha}'
+       ORDER BY m.created_at;
+
+    2. Leé el hilo COMPLETO del último día (todos los mensajes del paso 1, NO recortes a 5).
+
+    3. Clasificá en uno de los buckets: URGENTE / BAJA / NOVEDADES / ACCIÓN / CERRADA / AMBIGUO.
+       (Reglas detalladas en el cuadro de buckets de la skill madre.)
+
+    4. Si clasificás como CERRADA, ejecutá ESTE UPSERT en wa_chats_cerrado:
+       INSERT INTO wa_chats_cerrado (chat_id, ultimo_ts_cerrado, motivo, cerrado_por, updated_at)
+       SELECT '{chat_id}', MAX(timestamp), '<motivo ≤80 chars>', 'bot_ia', now()
+       FROM wa_messages WHERE chat_id = '{chat_id}'
+       ON CONFLICT (chat_id) DO UPDATE SET
+         ultimo_ts_cerrado = EXCLUDED.ultimo_ts_cerrado,
+         motivo = EXCLUDED.motivo,
+         cerrado_por = 'bot_ia',
+         updated_at = now();
+
+    5. Devolvé al orquestador (en formato compacto): {chat_id, chat_name, bucket, motivo, ultima_frase_cliente}.
+       NO devuelvas el hilo completo — solo el resumen estructurado.
+  """)
+```
+
+El orquestador acumula los resultados de los subagentes (un objeto por chat, ~200 bytes) sin acumular los hilos completos. Esto evita el límite de tokens y permite procesar 100+ grupos sin problemas.
+
+### Buckets de clasificación (referencia para los subagentes)
+
+Buckets (mutuamente excluyentes — cada subagente devuelve UNO):
 
 | Bucket | Criterio |
 |---|---|
@@ -132,26 +168,21 @@ Buckets (mutuamente excluyentes):
 
 Si un cliente entra en NOVEDADES y `chat_id` ya está en `wa_audio_enviado` con `audio_tipo='sofia_novedades'` → **reclasificar como 🔴 ESCALACIÓN** (Sofía no le bastó).
 
-### Paso 3.5 — Persistir cierres detectados en `wa_chats_cerrado`
+### Paso 3.5 — Verificar cierres persistidos
 
-Para cada grupo clasificado como ✓ CERRADA, UPSERT en `wa_chats_cerrado` antes de seguir. El frontend de la app filtra la solapa "WA Grupos / Sin contestar" usando esta tabla: si el último mensaje del grupo tiene `timestamp <= ultimo_ts_cerrado`, no aparece. Si llega un mensaje nuevo del cliente (`timestamp > ultimo_ts_cerrado`), reaparece automáticamente sin DELETE.
+Cada subagente que clasificó CERRADA ya hizo el UPSERT a `wa_chats_cerrado` dentro de su Task (paso 4 del prompt del subagente). Acá el orquestador solo cuenta cuántos cierres se persistieron, para incluir en el reporte.
 
+Si un subagente devolvió `bucket=CERRADA` pero falló su UPSERT (ej. timeout de Supabase), el orquestador puede reintentar el UPSERT explícito como fallback:
 ```sql
 INSERT INTO wa_chats_cerrado (chat_id, ultimo_ts_cerrado, motivo, cerrado_por, updated_at)
-VALUES ($1, $2, $3, 'bot_ia', now())
+SELECT $1, MAX(timestamp), $2, 'bot_ia', now()
+FROM wa_messages WHERE chat_id = $1
 ON CONFLICT (chat_id) DO UPDATE
   SET ultimo_ts_cerrado = EXCLUDED.ultimo_ts_cerrado,
       motivo = EXCLUDED.motivo,
       cerrado_por = 'bot_ia',
       updated_at = now();
 ```
-
-Donde:
-- `chat_id` = JID del grupo cerrado.
-- `ultimo_ts_cerrado` = `MAX(timestamp)` de `wa_messages` para ese chat al momento del análisis (BIGINT, no `created_at`).
-- `motivo` ≤80 chars (ej. "Cliente agradeció tras turno", "Consulta resuelta, OK del cliente").
-
-Ejecutar todos los UPSERT antes del Paso 4 para que los cierres queden persistidos aunque el resto del workflow falle.
 
 Las conversaciones ✓ CERRADA NO van al sub-reporte por chica — quedan archivadas y se cuentan en el contador "✓ Cerradas automáticamente".
 
