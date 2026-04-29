@@ -13,8 +13,10 @@ description: >
   expedientes para flagear novedades reales. Triggers: "control whatsapp", "revisar
   whatsapp", "control chats", "novedades whatsapp", "briefing whatsapp", "corrida
   whatsapp", "atencion clientes whatsapp". Programado para correr todos los días
-  hábiles a las 8:00 AR.
-version: 0.1.0
+  hábiles a las 8:00, 12:00 y 16:00 AR. La corrida de las 8 es modo COMPLETO
+  (todos los pendientes); las de 12 y 16 son INCREMENTAL (solo mensajes nuevos
+  de las últimas 4 hs, reporte al grupo TRABAJO solo si hay urgentes/Sofía/bajas).
+version: 0.2.0
 ---
 
 # Skill: Control WhatsApp diario
@@ -37,6 +39,7 @@ Corrida automatizada de chats pendientes para que las chicas (Paula, Mara, Elian
 **Supabase proyecto**: `wdgdbbcwcrirpnfdmykh`
 - Tabla `wa_messages` — mensajes WhatsApp
 - Tabla `wa_audio_enviado` — tracking de audios pregrabados (UNIQUE por chat_id+audio_tipo)
+- Tabla `wa_chats_cerrado` (PK `chat_id`) — chats cerrados detectados por IA o manual. Frontend filtra "Sin contestar" excluyendo `ultimo_ts_cerrado >= timestamp del último msg`. Reapertura automática si llega mensaje nuevo.
 - Tabla `expedientes` — para cross-check de movimientos
 
 **WhatsApp instance**: `inst_d9c22079`
@@ -51,6 +54,43 @@ Demandas (Registro) Provincia Bs.As., Control Dispos SRT, Claude SRT,
 Novedades - VETA CAPITAL, Novedades PJN, Novedades Pcia,
 Control exptes/consultas, INICIO - Nuevos formularios 2026, DIARIO LA LEY 🗞️📰⚖️
 ```
+
+## Modo según hora (LEER PRIMERO)
+
+Determinar la hora actual en AR via Bash:
+```bash
+HORA=$(TZ=America/Argentina/Buenos_Aires date '+%H')
+echo "Hora actual AR: $HORA"
+```
+
+- **HORA == 08 → MODO COMPLETO**: ejecutar el workflow tal como está descrito. Procesa todos los grupos pendientes del último día. Reporte completo al grupo TRABAJO con sub-bloques por chica.
+
+- **HORA == 12 o HORA == 16 → MODO INCREMENTAL**: solo procesa grupos con mensajes NUEVOS en las últimas 4 hs escritos por el cliente. El subset se calcula así:
+  ```sql
+  SELECT DISTINCT m.chat_id, m.chat_name
+  FROM wa_messages m
+  WHERE m.is_group = true
+    AND m.staff_name IS NULL
+    AND m.created_at >= NOW() - INTERVAL '4 hours'
+    AND m.chat_name NOT IN (<lista internos>);
+  ```
+  Resto del workflow idéntico (Paso 2 al 6) sobre ese subset.
+
+  **Reporte al TRABAJO en INCREMENTAL**: SOLO si hay 🚨 URGENTE o 🔴 ESCALACIÓN nuevos, O se mandó al menos 1 combo Sofía, O se detectó 🚪 BAJA. Si nada de eso → silencio (Paso 3.5 y 4 igual se ejecutan).
+
+  Formato reporte INCREMENTAL:
+  ```
+  ⚡ ACTUALIZACIÓN CHATS — [HH:MM]
+  (últimas 4 hs)
+
+  🤖 Audio Sofía enviado: [N]
+  ✓ Cerradas automáticamente: [N]
+
+  🚨 URGENTES NUEVOS ([N])
+  🔴 ESCALACIÓN ([N])
+  🚪 BAJAS ([N])
+  ```
+  Sin sub-bloques por chica en INCREMENTAL.
 
 ## Workflow
 
@@ -92,6 +132,29 @@ Buckets (mutuamente excluyentes):
 
 Si un cliente entra en NOVEDADES y `chat_id` ya está en `wa_audio_enviado` con `audio_tipo='sofia_novedades'` → **reclasificar como 🔴 ESCALACIÓN** (Sofía no le bastó).
 
+### Paso 3.5 — Persistir cierres detectados en `wa_chats_cerrado`
+
+Para cada grupo clasificado como ✓ CERRADA, UPSERT en `wa_chats_cerrado` antes de seguir. El frontend de la app filtra la solapa "WA Grupos / Sin contestar" usando esta tabla: si el último mensaje del grupo tiene `timestamp <= ultimo_ts_cerrado`, no aparece. Si llega un mensaje nuevo del cliente (`timestamp > ultimo_ts_cerrado`), reaparece automáticamente sin DELETE.
+
+```sql
+INSERT INTO wa_chats_cerrado (chat_id, ultimo_ts_cerrado, motivo, cerrado_por, updated_at)
+VALUES ($1, $2, $3, 'bot_ia', now())
+ON CONFLICT (chat_id) DO UPDATE
+  SET ultimo_ts_cerrado = EXCLUDED.ultimo_ts_cerrado,
+      motivo = EXCLUDED.motivo,
+      cerrado_por = 'bot_ia',
+      updated_at = now();
+```
+
+Donde:
+- `chat_id` = JID del grupo cerrado.
+- `ultimo_ts_cerrado` = `MAX(timestamp)` de `wa_messages` para ese chat al momento del análisis (BIGINT, no `created_at`).
+- `motivo` ≤80 chars (ej. "Cliente agradeció tras turno", "Consulta resuelta, OK del cliente").
+
+Ejecutar todos los UPSERT antes del Paso 4 para que los cierres queden persistidos aunque el resto del workflow falle.
+
+Las conversaciones ✓ CERRADA NO van al sub-reporte por chica — quedan archivadas y se cuentan en el contador "✓ Cerradas automáticamente".
+
 ### Paso 4 — Auto-envío del combo a los ✅ NOVEDADES nuevos
 
 Para cada grupo en NOVEDADES que NO esté en `wa_audio_enviado`:
@@ -130,7 +193,7 @@ ORDER BY chat_id, created_at DESC;
 ```
 Si no hay coincidencia → asignar a "Sin asignar".
 
-### Paso 7 — Generar y enviar reportes
+### Paso 7 — Generar y enviar reportes (solo MODO COMPLETO; en INCREMENTAL ver bloque "Modo según hora")
 
 #### 7a — Reporte general al grupo TRABAJO
 
@@ -139,6 +202,7 @@ Estructura:
 📋 CONTROL CHATS — [fecha]
 
 🤖 Audio Sofía enviado automáticamente: [N]
+✓ Cerradas automáticamente (UPSERT en wa_chats_cerrado): [N]
 
 🚨 URGENTES — RESPONDER YA ([N])
 1. [Cliente] (chica que venía contestando) — [resumen ≤40 palabras de qué pasó]
@@ -174,13 +238,14 @@ Repetir para Mara, Eliana, Clara, Noe. Si una chica tiene 0 pendientes, omitir s
 
 ### Paso 8 — Logging
 
-Imprimir en stdout:
-- N total grupos pendientes
+Imprimir en stdout (en cualquier modo):
+- Modo (COMPLETO / INCREMENTAL) y hora detectada
+- N total grupos procesados
 - N audios Sofía enviados
-- N escalaciones detectadas
-- N bajas detectadas
-- N por chica
-- jobIds de los mensajes enviados al TRABAJO
+- N cerradas automáticamente (UPSERT en `wa_chats_cerrado`)
+- N escalaciones / urgentes / bajas
+- N por chica (solo COMPLETO)
+- jobIds de los mensajes enviados al TRABAJO (si hubo)
 
 ## Triggers manuales
 
@@ -194,7 +259,7 @@ Imprimir en stdout:
 
 ## Scheduled trigger
 
-Configurado para correr **lunes a viernes 8:00 AR** vía Anthropic remote trigger. El prompt remoto invoca esta skill por nombre.
+Configurado para correr **lunes a viernes 8:00, 12:00 y 16:00 AR** vía Anthropic remote trigger (id `trig_014d19paikE3KzRpCkQYPsMd`, cron `0 11,15,19 * * 1-5` UTC). El prompt remoto invoca esta skill por nombre y el branching por hora se resuelve adentro de la skill (modo COMPLETO a las 8, INCREMENTAL en las otras dos).
 
 ## Edge cases
 
