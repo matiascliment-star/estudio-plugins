@@ -223,6 +223,35 @@ VALUES ($chat_id, $chat_name, 'sofia_novedades', 'inst_d9c22079');
 
 **NUNCA borres filas de `wa_audio_enviado` por timeout de pg_net.** Ya pasó el 2026-04-30: el agente borró 6 filas creyendo que fallaron, después la edge function entregó los audios igual, y al insertar la copia de respaldo quedaron 3 grupos con audio sin texto. Si querés saber qué entregó realmente, mirá `wa_messages` (donde `is_from_me=true AND chat_id=X AND created_at >= timestamp_envío`) — esa es la fuente de verdad de Whatsapp.
 
+### Paso 4.5 — Verificación de combo Sofía completo (audio + texto)
+
+Al terminar el batch del Paso 4, esperar 90s y verificar en `wa_messages` que **TODOS los chats con `wa_audio_enviado` insertado hoy tengan AMBOS audio Y texto entregados**:
+
+```sql
+WITH chats_hoy AS (
+  SELECT chat_id, chat_name, fecha_envio
+  FROM wa_audio_enviado
+  WHERE fecha_envio::date = CURRENT_DATE AND audio_tipo = 'sofia_novedades'
+),
+verificacion AS (
+  SELECT
+    c.chat_id, c.chat_name, c.fecha_envio,
+    EXISTS(SELECT 1 FROM wa_messages m WHERE m.chat_id=c.chat_id AND m.is_from_me=true AND m.type='audio' AND m.created_at >= c.fecha_envio - INTERVAL '2 minutes') AS tiene_audio,
+    EXISTS(SELECT 1 FROM wa_messages m WHERE m.chat_id=c.chat_id AND m.is_from_me=true AND m.type='text' AND m.content LIKE '%Sofía por WhatsApp%' AND m.created_at >= c.fecha_envio - INTERVAL '2 minutes') AS tiene_texto
+  FROM chats_hoy c
+)
+SELECT chat_id, chat_name, tiene_audio, tiene_texto
+FROM verificacion
+WHERE NOT (tiene_audio AND tiene_texto);
+```
+
+Para cada chat incompleto:
+- Si falta `tiene_audio` → re-disparar audio Sofía a ese chat (con timeout 90s).
+- Si falta `tiene_texto` → re-disparar texto Sofía a ese chat (con timeout 90s).
+- Esperar 4s entre cada retry, NO en paralelo.
+
+Esto cierra el agujero del 2026-04-30 cuando 3 chats quedaron con audio pero sin texto.
+
 Misma serialización para reportes al grupo TRABAJO: 1 mensaje cada 4s con `timeout_milliseconds=90000`.
 
 **Costo en tiempo:** 9 NOVEDADES × 2 envíos × ~5s + 6 reportes × ~5s = ~120s. Se acepta el delay.
