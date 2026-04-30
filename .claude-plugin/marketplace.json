@@ -1,6 +1,6 @@
 {
   "name": "estudio-plugins",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Plugins del Estudio García Climent para Cowork",
   "owner": {
     "name": "Estudio García Climent"
@@ -92,9 +92,9 @@
     },
     {
       "name": "agendar-comunicaciones-srt",
-      "version": "1.15.0",
+      "version": "1.16.0",
       "source": "./agendar-comunicaciones-srt",
-      "description": "Agenda diariamente comunicaciones de Mi Ventanilla SRT en Google Calendar con fecha y color correctos (Dictámenes naranja 3d, Constancias naranja 5d / azul con hora, Citaciones azul, Clausuras rojo CABA / verde Pcia / amarillo acuerdo). NO agenda ITMs. Reporta al grupo Claude SRT.",
+      "description": "Agenda diariamente comunicaciones de Mi Ventanilla SRT en Google Calendar con fecha y color correctos (Dictámenes e ITMs naranja 3d, Constancias naranja 5d / azul con hora, Citaciones azul, Clausuras rojo CABA / verde Pcia / amarillo acuerdo). Reporta al grupo Claude SRT.",
       "author": { "name": "Matias Climent" }
     },
     {

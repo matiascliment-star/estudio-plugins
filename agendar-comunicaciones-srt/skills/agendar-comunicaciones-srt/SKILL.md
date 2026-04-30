@@ -2,18 +2,19 @@
 name: agendar-comunicaciones-srt
 description: >
   Agendamiento automático diario (L-V 9am AR) de comunicaciones de Mi Ventanilla
-  SRT. Cubre 4 tipos con plazo procesal o fecha de audiencia: (1) Dictamen Médico
-  3 días hábiles, (2) Constancia de Orden de Estudio 5 días hábiles para
-  contestar intimación, (3) Citación a Examen Físico agenda la fecha de audiencia
-  + aviso al cliente, (4) Citación al Servicio de Homologación agenda fecha +
-  link Teams + aviso al cliente. Las ITMs NO se agendan (no se impugnan). Lee el texto extraído de los PDFs
-  (columna `adjuntos_miventanilla.texto_extraido`). Marca cada comunicación como
+  SRT. Cubre 5 tipos con plazo procesal o fecha de audiencia: (1) Dictamen Médico
+  3 días hábiles para impugnar, (2) ITM 3 días hábiles para impugnar, (3)
+  Constancia de Orden de Estudio 5 días hábiles para contestar intimación, (4)
+  Citación a Examen Físico agenda la fecha de audiencia + aviso al cliente, (5)
+  Citación al Servicio de Homologación agenda fecha + link Teams + aviso al
+  cliente. Lee el texto extraído de los PDFs (columna
+  `adjuntos_miventanilla.texto_extraido`). Marca cada comunicación como
   procesada. Reporte diario al grupo "Claude SRT". Triggers: "agendar
   comunicaciones SRT", "procesar comunicaciones", "mi ventanilla".
-version: 1.2.0
+version: 1.3.0
 ---
 
-# Agendar Comunicaciones SRT — v1.2.0
+# Agendar Comunicaciones SRT — v1.3.0
 
 ## OBJETIVO
 
@@ -24,6 +25,7 @@ Chequeo diario (L-V 9am AR) de comunicaciones nuevas de Mi Ventanilla con plazo 
 | Tipo | Plazo / Acción | Calendar | Aviso al cliente |
 |------|----------------|----------|------------------|
 | Dictamen Médico | 3 días hábiles impugnar | Principal | No |
+| ITM | 3 días hábiles impugnar | Principal | No |
 | Constancia Orden Estudio (intimación) | 5 días hábiles contestar | Principal | No |
 | Constancia Orden Estudio (al cliente) | Fecha estudio directa | Principal | **Sí** (cálido) |
 | Citación Examen Físico | Fecha audiencia directa | Principal | **Sí** (cálido) |
@@ -101,6 +103,7 @@ LEFT JOIN casos_srt c ON c.numero_srt = m.srt_expediente_nro
 LEFT JOIN adjuntos_miventanilla a ON a.comunicacion_id = m.id
 WHERE m.tipo_comunicacion IN (
     'Notificación de Dictamen Médico',
+    'Notificación de ITM',
     'Notificación de Constancia de Orden de Estudio',
     'Notificación de Citación',
     'Notificación de Citación al Servicio de Homologación',
@@ -181,14 +184,17 @@ def primer_nombre(nombre_actor):
         i += 1
     return partes[i].title() if i < len(partes) else partes[0].title()
 
-def proc_dictamen_medico(c, tipo_label):
+def proc_dictamen_itm(c, tipo_label):
+    """Dictamen Médico e ITM comparten lógica: 3 días hábiles para impugnar.
+    El `tipo_label` ('DICTAMEN MEDICO' o 'ITM') solo cambia el texto del summary
+    para que en el calendario se distingan a simple vista."""
     notif = date.fromisoformat(c['fecha_notif'])
     fecha_ev = sumar_dh(notif, 3)
     return {
         'fecha_evento': fecha_ev,
         'summary': f"{c['nombre_actor'] or '(SIN NOMBRE)'}-{c['srt']}- VENCE IMPUGNAR {tipo_label}",
         'aviso_cliente': None,
-        'colorId_override': '6',  # naranja: dictamen para impugnar
+        'colorId_override': '6',  # naranja: dictamen / ITM para impugnar
     }
 
 def proc_constancia_orden_estudio(c):
@@ -504,7 +510,8 @@ def dispatch_envio_comunicacion(c):
     return SKIP_DISPATCH
 
 PROCESADORES = {
-    'Notificación de Dictamen Médico': lambda c: proc_dictamen_medico(c, 'DICTAMEN MEDICO'),
+    'Notificación de Dictamen Médico': lambda c: proc_dictamen_itm(c, 'DICTAMEN MEDICO'),
+    'Notificación de ITM': lambda c: proc_dictamen_itm(c, 'ITM'),
     'Notificación de Constancia de Orden de Estudio': proc_constancia_orden_estudio,
     'Notificación de Citación': proc_citacion_examen,
     'Notificación de Citación al Servicio de Homologación': proc_citacion_homologacion,
@@ -859,6 +866,10 @@ Reportar: total procesadas, agendadas por tipo, avisos WA enviados a clientes, s
 
 ## NOTAS
 
+- **Reporte WA — bloque ITM**: la función `fn_armar_reporte_agendar_srt` debe
+  incluir `'Notificación de ITM'` junto con `'Notificación de Dictamen Médico'`
+  en el bloque "DICTAMEN MÉDICO / ITM — plazo 3 hábiles p/ impugnar". Ver
+  `migrations/001_incluir_itm_en_reporte.sql` para el patch exacto.
 - **Traslado de Apelación y Agravios**: pendiente Fase 3. Requiere leer texto y detectar si apeló ART; solo en ese caso agendar 10 hábiles para contestar agravios.
 - **Parseo frágil**: los regex de citaciones asumen el template estándar SRT. Si cambia el formato del PDF, el parseo falla y aparece en "errores de procesamiento" sin romper el resto.
 - **Normalización teléfono cliente**: formato esperado por `wa-send` es `5491XXXXXXXX@s.whatsapp.net` o solo dígitos `5491XXXXXXXX`. Normalizar antes de POST.
