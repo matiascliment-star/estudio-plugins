@@ -13,11 +13,15 @@ NO genera relato del accidente (eso es `redaccion-laboral`), NO rellena Anexo I,
 
 1. **Identificar la carpeta del caso** — el usuario suele estar parado en la carpeta del cliente (ej. `AA clientes activos/<APELLIDO> <NOMBRE> - SRT - <NUM>/`). Si no es claro, preguntar.
 
-2. **Leer los PDFs del expediente** (en orden de utilidad):
-   - `*ITM*.pdf` — Informe Técnico Médico: trae CUIL, fecha nac., fecha accidente, tipo, diagnóstico, mecanismo, ART, comisión médica jurisdiccional. Es el más rico.
+2. **Leer TODOS los PDFs médicos disponibles en la carpeta** (no solo el ITM — la historia clínica suele tener zonas lesionadas y diagnósticos que el ITM resume o directamente omite). Orden de utilidad:
+   - `*ITM*.pdf` — Informe Técnico Médico: trae CUIL, fecha nac., fecha accidente, tipo, diagnóstico, mecanismo, ART, comisión médica jurisdiccional. Es el más rico para datos administrativos.
+   - `*HC*.pdf`, `*historia clinica*.pdf`, `*hist*clin*.pdf`, `expediente*HC.pdf` — **Historia Clínica completa** del prestador (consultas, estudios, partes quirúrgicos, evoluciones, kinesiología, psicología, etc.). Acá suele aparecer todo lo que el ITM omitió: lesiones secundarias, zonas con dolor, contusiones, derivaciones, RVAN. **LEERLA SIEMPRE si está en la carpeta**, aunque sea larga (paginar con `pages: "1-20"`, etc.).
+   - `*pericia*.pdf`, `*informe medico*.pdf`, `*estudio*.pdf` — pericias, informes médicos privados o estudios complementarios (RMN, EMG, RX). Aportan diagnósticos finos.
    - `expediente_*.pdf` o el expediente SRT principal — formulario de inicio con domicilio, empleador, número de expediente, carátula.
-   - `ALTA*.pdf` / `Alta médica*.pdf` — confirma diagnóstico y secuelas incapacitantes.
-   - DDJJ B / aceptación de patrocinio — completan datos.
+   - `ALTA*.pdf` / `Alta médica*.pdf` / `*constancia*alta*.pdf` — confirma diagnóstico, secuelas incapacitantes y mecanismo (suele tener el relato en el campo "Descripción del motivo de consulta").
+   - `DDJJ*`, `Aceptación*Patrocinio*.pdf` — completan datos del damnificado y del letrado.
+
+   **Regla de oro**: si la carpeta tiene historia clínica, leerla antes de armar el manifiesta. Las zonas que aparecen en HC y NO en el ITM también se reclaman (el ITM solo reconoce lo que la ART aceptó; la HC muestra todo lo que el cliente refirió).
 
 3. **Extraer datos clave**:
    - Apellido y Nombre del damnificado
