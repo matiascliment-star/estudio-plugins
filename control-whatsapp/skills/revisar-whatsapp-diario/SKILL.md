@@ -186,9 +186,39 @@ ON CONFLICT (chat_id) DO UPDATE
 
 Las conversaciones ✓ CERRADA NO van al sub-reporte por chica — quedan archivadas y se cuentan en el contador "✓ Cerradas automáticamente".
 
-### Paso 4 — Auto-envío del combo a los ✅ NOVEDADES nuevos
+### Paso 4 — Auto-envío del combo a los ✅ NOVEDADES nuevos (SERIALIZADO)
 
-Para cada grupo en NOVEDADES que NO esté en `wa_audio_enviado`:
+⚠️ **NO disparar wa-send en paralelo.** La edge function `wa-send` hace un MCP session init completo (4 round-trips al servidor MCP de WhatsApp) por cada llamada. Con >5 requests concurrentes el MCP se satura → 504 timeouts. (Pasó el 2026-04-30: solo 3 de 9 textos confirmaron entrega.)
+
+Para cada grupo en NOVEDADES nuevo, ejecutar SECUENCIALMENTE (una llamada a `wa-send`, esperar 4s, siguiente):
+
+```sql
+-- Audio Sofía
+SELECT net.http_post(
+  url := 'https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send',
+  body := jsonb_build_object('chatId', $chat_id, 'media', '<URL audio Sofía>', 'mediaType', 'audio')
+) AS audio_request_id;
+
+SELECT pg_sleep(4);
+
+-- Texto Sofía
+SELECT net.http_post(
+  url := 'https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send',
+  body := jsonb_build_object('chatId', $chat_id, 'text', '<bloque 5 bullets>')
+) AS text_request_id;
+
+SELECT pg_sleep(4);
+
+-- Verificar status de ambos antes del INSERT
+SELECT id, status_code FROM net._http_response
+WHERE id IN ($audio_request_id, $text_request_id);
+```
+
+Solo INSERT en `wa_audio_enviado` si AMBOS responden status_code = 200. Si alguno falla (504, timeout, 5xx), NO INSERT — la próxima corrida lo reintenta.
+
+Misma serialización para reportes al grupo TRABAJO: 1 mensaje cada 4s.
+
+**Costo en tiempo:** 9 NOVEDADES × 2 envíos × 4s + 6 reportes × 4s = ~96s. Se acepta el delay para no perder envíos.
 
 1. `wa_send_audio` con `ptt=true` y la URL del audio Sofía
 2. `wa_send_text` con el bloque completo (5 bullets):
