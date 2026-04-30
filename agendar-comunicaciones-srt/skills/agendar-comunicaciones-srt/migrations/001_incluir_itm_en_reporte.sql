@@ -1,26 +1,14 @@
 -- Migration: incluir 'Notificación de ITM' en el bloque DICTAMEN MEDICO del reporte WA.
+-- Aplicada: 2026-04-30 sobre wdgdbbcwcrirpnfdmykh.
 --
--- Contexto: en v1.11.0 (commit f5617fa) se removió el procesamiento de ITMs.
--- En v1.16.0 se restauran y se agrupan junto con Dictamen Médico en el reporte
--- (3 días hábiles para impugnar, mismo color naranja).
+-- Cambios sobre fn_armar_reporte_agendar_srt:
+--   1. Header del bloque: "DICTAMEN MÉDICO / ITM — plazo 3 hábiles p/ impugnar".
+--   2. Label por línea: CASE WHEN tipo_comunicacion = 'Notificación de ITM'
+--      THEN 'ITM' ELSE 'DICT MED' END.
+--   3. Filtro WHERE del bloque dictamen ahora usa
+--      `tipo_comunicacion IN ('Notificación de Dictamen Médico', 'Notificación de ITM')`.
+--   4. Post-check de huérfanos también incluye 'Notificación de ITM'.
 --
--- Aplicar cuando el Supabase MCP vuelva. Pasos:
--- 1. Obtener el cuerpo actual de la función:
---      SELECT pg_get_functiondef(oid) FROM pg_proc
---      WHERE proname = 'fn_armar_reporte_agendar_srt';
--- 2. En el SELECT que arma el bloque "DICTAMEN MÉDICO" buscar el filtro:
---        WHERE tipo_comunicacion = 'Notificación de Dictamen Médico'
---    y reemplazarlo por:
---        WHERE tipo_comunicacion IN ('Notificación de Dictamen Médico',
---                                    'Notificación de ITM')
--- 3. Cambiar el header del bloque de:
---        '\n✅ *DICTAMEN MÉDICO — plazo 3 hábiles p/ impugnar*'
---    a:
---        '\n✅ *DICTAMEN MÉDICO / ITM — plazo 3 hábiles p/ impugnar*'
--- 4. En el ítem por línea, derivar el label para distinguir ambas variantes:
---        CASE WHEN tipo_comunicacion = 'Notificación de ITM' THEN 'ITM'
---             ELSE 'DICT MED' END
---    (igual que hacía el Python en v1.10.x antes del retiro).
---
--- Una vez recompuesto el cuerpo, reemplazar la función con CREATE OR REPLACE
--- FUNCTION fn_armar_reporte_agendar_srt(...) RETURNS text AS $$ ... $$;
+-- El SQL aplicado fue un CREATE OR REPLACE FUNCTION completo (no se versiona
+-- aquí porque la fuente de verdad es el cuerpo de la función en Supabase —
+-- recuperable con `pg_get_functiondef`).

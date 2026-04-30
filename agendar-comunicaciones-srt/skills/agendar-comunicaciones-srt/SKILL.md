@@ -866,10 +866,11 @@ Reportar: total procesadas, agendadas por tipo, avisos WA enviados a clientes, s
 
 ## NOTAS
 
-- **Reporte WA — bloque ITM**: la función `fn_armar_reporte_agendar_srt` debe
-  incluir `'Notificación de ITM'` junto con `'Notificación de Dictamen Médico'`
-  en el bloque "DICTAMEN MÉDICO / ITM — plazo 3 hábiles p/ impugnar". Ver
-  `migrations/001_incluir_itm_en_reporte.sql` para el patch exacto.
+- **Reporte WA — bloque ITM**: la función `fn_armar_reporte_agendar_srt`
+  agrupa ITMs y Dictámenes Médicos en el bloque "DICTAMEN MÉDICO / ITM —
+  plazo 3 hábiles p/ impugnar". El label por línea sale de un CASE sobre
+  `tipo_comunicacion` ('ITM' vs 'DICT MED'). Ver
+  `migrations/001_incluir_itm_en_reporte.sql` (aplicado 2026-04-30).
 - **Traslado de Apelación y Agravios**: pendiente Fase 3. Requiere leer texto y detectar si apeló ART; solo en ese caso agendar 10 hábiles para contestar agravios.
 - **Parseo frágil**: los regex de citaciones asumen el template estándar SRT. Si cambia el formato del PDF, el parseo falla y aparece en "errores de procesamiento" sin romper el resto.
 - **Normalización teléfono cliente**: formato esperado por `wa-send` es `5491XXXXXXXX@s.whatsapp.net` o solo dígitos `5491XXXXXXXX`. Normalizar antes de POST.
