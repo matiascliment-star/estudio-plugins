@@ -188,37 +188,44 @@ Las conversaciones ✓ CERRADA NO van al sub-reporte por chica — quedan archiv
 
 ### Paso 4 — Auto-envío del combo a los ✅ NOVEDADES nuevos (SERIALIZADO)
 
-⚠️ **NO disparar wa-send en paralelo.** La edge function `wa-send` hace un MCP session init completo (4 round-trips al servidor MCP de WhatsApp) por cada llamada. Con >5 requests concurrentes el MCP se satura → 504 timeouts. (Pasó el 2026-04-30: solo 3 de 9 textos confirmaron entrega.)
+⚠️ **DOS reglas críticas (aprendidas el 2026-04-30):**
 
-Para cada grupo en NOVEDADES nuevo, ejecutar SECUENCIALMENTE (una llamada a `wa-send`, esperar 4s, siguiente):
+1. **`timeout_milliseconds := 90000`** explícito en cada `net.http_post`. La edge function `wa-send` tarda **60-150 segundos** (init MCP + send WhatsApp). El default de pg_net es 5s → corta antes de que la edge termine. Pero la edge SIGUE procesando y el mensaje SÍ llega al cliente. Si dejás default, vas a creer que falló cuando en realidad funcionó.
+2. **NO disparar wa-send en paralelo.** Con >5 requests concurrentes el MCP de WhatsApp se satura (504). Serializar con `pg_sleep(4)` entre llamadas.
+
+Para cada grupo en NOVEDADES nuevo, ejecutar SECUENCIALMENTE:
 
 ```sql
--- Audio Sofía
+-- 1. Audio Sofía (timeout 90s)
 SELECT net.http_post(
   url := 'https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send',
-  body := jsonb_build_object('chatId', $chat_id, 'media', '<URL audio Sofía>', 'mediaType', 'audio')
+  body := jsonb_build_object('chatId', $chat_id, 'media', '<URL audio Sofía>', 'mediaType', 'audio'),
+  timeout_milliseconds := 90000
 ) AS audio_request_id;
 
 SELECT pg_sleep(4);
 
--- Texto Sofía
+-- 2. Texto Sofía (timeout 90s)
 SELECT net.http_post(
   url := 'https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send',
-  body := jsonb_build_object('chatId', $chat_id, 'text', '<bloque 5 bullets>')
+  body := jsonb_build_object('chatId', $chat_id, 'text', '<bloque 5 bullets>'),
+  timeout_milliseconds := 90000
 ) AS text_request_id;
 
 SELECT pg_sleep(4);
 
--- Verificar status de ambos antes del INSERT
-SELECT id, status_code FROM net._http_response
-WHERE id IN ($audio_request_id, $text_request_id);
+-- 3. INSERT optimista en wa_audio_enviado (después de disparar, sin esperar verificación)
+INSERT INTO wa_audio_enviado (chat_id, chat_name, audio_tipo, instance_id)
+VALUES ($chat_id, $chat_name, 'sofia_novedades', 'inst_d9c22079');
 ```
 
-Solo INSERT en `wa_audio_enviado` si AMBOS responden status_code = 200. Si alguno falla (504, timeout, 5xx), NO INSERT — la próxima corrida lo reintenta.
+**REGLA CLAVE:** el INSERT a `wa_audio_enviado` va **inmediatamente después de disparar audio + texto**, NO después de verificar `status_code`. Razón: pg_net puede dar timeout aún con `timeout_milliseconds=90000` si la red es lenta, pero la edge function igual entrega el mensaje. Si esperamos verificación, vamos a creer que falló y vamos a re-mandar mañana → audio duplicado al cliente.
 
-Misma serialización para reportes al grupo TRABAJO: 1 mensaje cada 4s.
+**NUNCA borres filas de `wa_audio_enviado` por timeout de pg_net.** Ya pasó el 2026-04-30: el agente borró 6 filas creyendo que fallaron, después la edge function entregó los audios igual, y al insertar la copia de respaldo quedaron 3 grupos con audio sin texto. Si querés saber qué entregó realmente, mirá `wa_messages` (donde `is_from_me=true AND chat_id=X AND created_at >= timestamp_envío`) — esa es la fuente de verdad de Whatsapp.
 
-**Costo en tiempo:** 9 NOVEDADES × 2 envíos × 4s + 6 reportes × 4s = ~96s. Se acepta el delay para no perder envíos.
+Misma serialización para reportes al grupo TRABAJO: 1 mensaje cada 4s con `timeout_milliseconds=90000`.
+
+**Costo en tiempo:** 9 NOVEDADES × 2 envíos × ~5s + 6 reportes × ~5s = ~120s. Se acepta el delay.
 
 1. `wa_send_audio` con `ptt=true` y la URL del audio Sofía
 2. `wa_send_text` con el bloque completo (5 bullets):
@@ -326,6 +333,7 @@ Configurado para correr **lunes a viernes 8:00, 12:00 y 16:00 AR** vía Anthropi
 
 ## Edge cases
 
+- **pg_net timeout NO significa fallo de envío.** wa-send tarda 60-150s; pg_net default corta a los 5s. Usar SIEMPRE `timeout_milliseconds := 90000`. Aún así, si pg_net devuelve NULL/timeout, el mensaje probablemente SÍ llegó. NO cleanear `wa_audio_enviado` ni reintentar basándose en `_http_response` — usar `wa_messages` como fuente de verdad.
 - **Instancia WA caída**: si `wa_send_*` retorna error de instancia, abortar inmediatamente y mandar alerta al grupo TRABAJO de que el bot no anduvo.
 - **Audio URL caída**: verificar al inicio que la URL del audio Sofía responda 200. Si no, alertar y abortar el envío automático (el reporte sí se manda).
 - **Grupo nuevo sin clasificar previamente**: tratar como grupo de cliente normal salvo que esté en la lista de internos.
