@@ -164,7 +164,17 @@ Buckets (mutuamente excluyentes — cada subagente devuelve UNO):
 | ✅ NOVEDADES | Pide estado genérico: "alguna novedad", "como va", "como sigue" — sin pregunta concreta |
 | 🟡 ACCIÓN CONCRETA | Pide algo específico (monto, fecha cobro, turno, nro expediente, doc), mandó info, hizo consulta puntual |
 | ✓ CERRADA | Cliente cerró con gracias/ok/reaction tras respuesta efectiva del staff |
-| ⚫ AMBIGUO | Audio/imagen sin texto, requiere revisión humana |
+| ⚫ AMBIGUO | Audio/imagen **SIN transcripción disponible** (`transcripcion IS NULL`). NO usar este bucket si el audio/imagen tiene transcripción/OCR — en ese caso, leé el texto transcrito como si fuera el mensaje del cliente y clasificá según contenido. |
+
+**REGLA CRÍTICA — audios e imágenes con transcripción:**
+
+La query del Paso 2 hace `LEFT JOIN wa_media_procesado` que devuelve `transcripcion` (texto extraído por Whisper para audios o por Claude vision para imágenes). Si `transcripcion` NO es NULL:
+- Tratá el contenido como si el cliente lo hubiera escrito en texto.
+- Clasificá según las reglas normales (URGENTE/BAJA/NOVEDADES/ACCION/CERRADA).
+- Ejemplo: audio transcrito como "Buen día, gracias, no hay problema" tras respuesta del estudio → CERRADA, no AMBIGUO.
+- Ejemplo: audio transcrito como "Tienen alguna novedad?" → NOVEDADES, no AMBIGUO.
+
+`AMBIGUO` solo aplica cuando `m.type IN ('audio','image','video') AND p.transcripcion IS NULL` — es decir, el media existe pero todavía no se procesó (race condition: cliente mandó audio hace <30s, la edge function `process-wa-media` aún no terminó). En ese caso reportarlo como AMBIGUO así un humano lo escucha.
 
 Si un cliente entra en NOVEDADES y `chat_id` ya está en `wa_audio_enviado` con `audio_tipo='sofia_novedades'` → **reclasificar como 🔴 ESCALACIÓN** (Sofía no le bastó).
 
