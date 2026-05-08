@@ -41,7 +41,18 @@ Supabase project `wdgdbbcwcrirpnfdmykh`. La query calcula `dr = plazo - (hoy - f
 - `fecha_ref = MAX(ultimo_impulso_propio, último movimiento real, último click válido)`
 - `plazo = expedientes.plazo_caducidad` (si está), sino por default: Cámara=90, CABA 1ra=180, resto=90.
 
-**Click válido** (de `impulsos_caducidad`): click con escrito asociado, O click sin escrito pero hace ≤7 días (plazo de gracia del sistema PJN/MEV para asociar escrito al click). Después de 7 días sin asociar, el click se considera "vencido" y deja de contar.
+**Click válido** (de `impulsos_caducidad`): el click sirve para "tapar" el expediente y sacarlo de la corrida mientras la chica tiene tiempo de subir el escrito. Vale si se cumple **alguna** de estas tres condiciones:
+1. Tiene escrito asociado (`escrito_id IS NOT NULL`) — ya se cumplió el impulso, **O**
+2. `fecha_click = CURRENT_DATE` — siempre tapa por el resto del día calendario, sin importar el `dr`. Esto evita que un mismo expediente aparezca repetido si se tiran 2 o 3 corridas el mismo día, **O**
+3. Es de los últimos 40 días **Y** el `dr` calculado SIN considerar el click (es decir, contra el último movimiento real + último impulso propio) es **mayor a 5 días**.
+
+La regla #3 (40 días Y dr_sin_click > 5) garantiza:
+- Si la chica clickeó pero después no subió escrito, el expediente no vuelve a aparecer durante 40 días (evita que reaparezca a los 7 y le queden todos los de 90 días repitiéndose sin que pueda dejar otro escrito).
+- Pero si el expediente está a ≤5 días de caducar, el click se ignora y vuelve a entrar a la corrida — los críticos nunca quedan tapados.
+
+La regla #2 cubre el caso de múltiples corridas en el mismo día: aunque el click no tape al día siguiente (porque `dr ≤ 5`), sí tapa por las horas restantes del día en que se hizo el click.
+
+La query corre todos los días: el chequeo `dr_sin_click > 5` se reevalúa diariamente, así que un click cuando faltaban 10 días deja de tapar al llegar a los 5.
 
 **Exclusión de ejecución**: expedientes con `estado` que empieza con 70–76 se excluyen porque los maneja el plugin `control-liquidacion` (corrida de liquidación). Evita doble procesamiento.
 
@@ -52,12 +63,37 @@ WITH ult_mov AS (
   SELECT expediente_id, MAX(fecha) AS fecha FROM movimientos_judicial GROUP BY expediente_id
 ),
 agg AS (SELECT expediente_id, MAX(fecha) AS fecha FROM ult_mov GROUP BY expediente_id),
+-- Calculamos primero la fecha_ref y el plazo SIN considerar el click,
+-- para poder evaluar si el click "tapa" o no al expediente.
+sin_click AS (
+  SELECT
+    e.id AS expediente_id,
+    GREATEST(
+      COALESCE(e.ultimo_impulso_propio, '1900-01-01'::date),
+      COALESCE(a.fecha, '1900-01-01'::date)
+    ) AS fecha_ref_sin_click,
+    COALESCE(e.plazo_caducidad,
+      CASE
+        WHEN LOWER(COALESCE(e.instancia_actual,'')) IN ('camara','cámara','corte') THEN 90
+        WHEN LOWER(COALESCE(e.juzgado,'')) LIKE '%sala %' OR LOWER(COALESCE(e.juzgado,'')) LIKE '%cámara%' THEN 90
+        WHEN e.jurisdiccion = 'CABA' THEN 180 ELSE 90
+      END) AS plazo
+  FROM expedientes e
+  LEFT JOIN agg a ON a.expediente_id = e.id
+),
+-- Click válido: 3 reglas (ver explicación arriba).
+--   1) escrito asociado: ya se cumplió el impulso.
+--   2) fecha_click = hoy: tapa por el día (cubre múltiples corridas mismo día).
+--   3) últimos 40 días Y dr_sin_click > 5: ventana larga, salvo que falte poco para caducar.
 ult_click AS (
-  SELECT expediente_id, MAX(fecha_click) AS fecha
-  FROM impulsos_caducidad
-  WHERE escrito_id IS NOT NULL                      -- click con escrito asociado
-     OR fecha_click > CURRENT_DATE - INTERVAL '7 days'  -- o click sin escrito pero dentro del plazo de gracia
-  GROUP BY expediente_id
+  SELECT ic.expediente_id, MAX(ic.fecha_click) AS fecha
+  FROM impulsos_caducidad ic
+  JOIN sin_click sc ON sc.expediente_id = ic.expediente_id
+  WHERE ic.escrito_id IS NOT NULL
+     OR ic.fecha_click = CURRENT_DATE
+     OR (ic.fecha_click > CURRENT_DATE - INTERVAL '40 days'
+         AND (sc.plazo - (CURRENT_DATE - sc.fecha_ref_sin_click)) > 5)
+  GROUP BY ic.expediente_id
 ),
 base AS (
   SELECT
