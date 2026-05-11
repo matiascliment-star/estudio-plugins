@@ -9,7 +9,7 @@ description: >
   usuario pida: "control clausuras", "revisar dispos SRT", "chequear vencimientos
   clausura", "briefing clausuras". Triggers: "control clausuras", "dispos SRT",
   "vencimientos clausura", "clausuras srt".
-version: 2.1.0
+version: 2.2.0
 ---
 
 # Control de Clausuras SRT
@@ -285,13 +285,22 @@ for ev in events:
     if not t: continue
     st = ev.get('start_date')
     if not st: continue
-    # Convención NUEVA del estudio (v1.4.0+ de agendar-comunicaciones-srt):
-    # el summary de rechazos termina EXACTAMENTE en 'CABA' o 'PCIA' (no ciudad,
-    # no código de CM). Convención vieja: 'MAR DEL PLATA', 'LA PLATA', 'QUILMES',
-    # 'CM 37', etc. Detectamos cuál es leyendo el último token.
-    sufijo = s.rstrip().split(')')[-1].strip()  # texto después del último ')'
+    # Convención NUEVA del estudio (v1.5.0+ de agendar-comunicaciones-srt).
+    # Un summary se considera normalizado si termina en alguna de estas formas:
+    #   - '(ACUERDO)'             → clausura con acuerdo
+    #   - ' CABA'                 → CABA puro (no_determinada) o con código ('CM 10L CABA')
+    #   - ' PCIA'                 → PCIA puro (no_determinada)
+    #   - '(PCIA)'                → con código + ciudad ('CM 37 QUILMES (PCIA)')
+    # Convención vieja: 'MAR DEL PLATA', 'LA PLATA', 'QUILMES' a secas, sin código.
+    s_strip = s.rstrip()
+    sufijo = s_strip.split(')')[-1].strip()  # texto después del último ')'
     es_acuerdo = '(ACUERDO)' in s
-    normalizado = sufijo in ('CABA', 'PCIA') or es_acuerdo
+    normalizado = (
+        es_acuerdo
+        or s_strip.endswith('(PCIA)')
+        or s_strip.endswith(' CABA')
+        or s_strip.endswith(' PCIA')
+    )
     by_srt.setdefault(srt_norm, []).append({
         'id': ev.get('id'), 'tipo': t,
         'fecha': date.fromisoformat(st[:10]),

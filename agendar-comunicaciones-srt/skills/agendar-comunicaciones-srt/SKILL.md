@@ -11,10 +11,10 @@ description: >
   `adjuntos_miventanilla.texto_extraido`). Marca cada comunicación como
   procesada. Reporte diario al grupo "Claude SRT". Triggers: "agendar
   comunicaciones SRT", "procesar comunicaciones", "mi ventanilla".
-version: 1.4.0
+version: 1.5.0
 ---
 
-# Agendar Comunicaciones SRT — v1.4.0
+# Agendar Comunicaciones SRT — v1.5.0
 
 ## OBJETIVO
 
@@ -53,7 +53,7 @@ Nota: las clausuras también las verifica el skill `control-clausuras-srt` los l
 
 ## WORKFLOW
 
-### Paso 0 — Feriados
+### Paso 0 — Feriados + mapping CM
 
 ```sql
 SELECT fecha::text FROM feriados_ar
@@ -64,6 +64,16 @@ WHERE fecha BETWEEN
 ORDER BY fecha;
 ```
 → `/tmp/feriados.json`
+
+```sql
+SELECT codigo, ciudad, es_caba FROM cm_jurisdicciones;
+```
+→ `/tmp/cm_jurisdicciones.json` con estructura
+`[{"codigo":"37","ciudad":"QUILMES","es_caba":false}, …]`. La skill usa
+este mapping para armar el sufijo del summary de clausuras de rechazo:
+- CABA → `CM <codigo> CABA`               (ej. `CM 10L CABA`)
+- Pcia → `CM <codigo> <CIUDAD> (PCIA)`    (ej. `CM 37 QUILMES (PCIA)`)
+- Sin mapping → `CM <codigo>` (fallback visible: queda flageado para sembrar)
 
 ### Paso 1 — Comunicaciones pendientes con texto
 
@@ -387,9 +397,48 @@ def detectar_cm_de_nombre(nombre):
     return m.group(1).strip().upper() if m else None
 
 def cm_es_caba(codigo):
-    """CM 10 (y variantes 10L, 10A, etc.) → CABA. Cualquier otra → Pcia."""
+    """Fallback regex cuando un código no está en cm_jurisdicciones.
+    CM 10 y variantes (10L, 10A) → CABA. Cualquier otra → Pcia."""
     if not codigo: return None
     return bool(re.fullmatch(r'10[A-Z]*', codigo.strip().upper()))
+
+# Mapping cargado del Paso 0 (cm_jurisdicciones). Si el archivo no existe,
+# queda vacío y todo cae a fallback regex.
+try:
+    _CM_ROWS = json.load(open('/tmp/cm_jurisdicciones.json'))
+    CM_MAPPING = {r['codigo'].strip().upper(): r for r in _CM_ROWS}
+except FileNotFoundError:
+    CM_MAPPING = {}
+
+def jurisdiccion_de_codigo(codigo):
+    """Devuelve (ciudad, is_caba, en_mapping).
+    - Si código está en cm_jurisdicciones: usa la fila exacta.
+    - Si no está: fallback regex (es_caba por '10*'), ciudad = None.
+      en_mapping=False permite que el reporte WA flaggee el código faltante.
+    """
+    if not codigo: return (None, None, False)
+    cod = codigo.strip().upper()
+    row = CM_MAPPING.get(cod)
+    if row:
+        return (row['ciudad'], bool(row['es_caba']), True)
+    return (None, cm_es_caba(cod), False)
+
+def sufijo_summary_rechazo(codigo):
+    """Arma el sufijo del summary para clausuras de rechazo según la CM.
+    Formato (v1.5.0):
+      - CABA en mapping        → 'CM 10L CABA'
+      - Pcia en mapping        → 'CM 37 QUILMES (PCIA)'
+      - Código no en mapping   → 'CM 99' (fallback visible)
+    Devuelve (sufijo_str, is_caba, en_mapping) — caller usa is_caba para
+    decidir color y plazos.
+    """
+    ciudad, is_caba, en_mapping = jurisdiccion_de_codigo(codigo)
+    if en_mapping:
+        if is_caba:
+            return (f'CM {codigo} CABA', True, True)
+        return (f'CM {codigo} {ciudad} (PCIA)', False, True)
+    # Código detectado pero no en mapping: usar lo mínimo seguro
+    return (f'CM {codigo}', is_caba, False)
 
 def es_clausura_con_acuerdo(texto):
     """Detecta si la Disposición de Clausura es por homologación de acuerdo.
@@ -415,9 +464,12 @@ def proc_clausura(c):
        acuerdo. Plazo: 5 días hábiles para contestar intimación. Color amarillo.
 
     2) CLAUSURA DE RECHAZO/DIVERGENCIA con jurisdicción CONOCIDA: leyendo qué CM
-       firma se decide CABA (códigos 10/10L/10A) o Pcia (cualquier otro código).
-       Summary termina en `CABA` o `PCIA` (no se pone nombre de ciudad ni código
-       de CM — la convención del estudio es la jurisdicción a secas).
+       firma se decide CABA o Pcia. La ciudad sale del mapping `cm_jurisdicciones`
+       (NO de la oficina de emisión ni del domicilio del cliente).
+       Summary (v1.5.0):
+         CABA → `... (X DIAS) CM 10L CABA`
+         Pcia → `... (X DIAS) CM 37 QUILMES (PCIA)`
+         Código no en mapping → `... (X DIAS) CM 99` (fallback visible)
        Plazos: 15 d.h. CABA, 15 d.h. + 90 d.h. Pcia. Color rojo CABA, verde Pcia.
 
     3) CLAUSURA con jurisdicción NO DETERMINADA: no se pudo leer el código en
@@ -476,18 +528,19 @@ def proc_clausura(c):
 
     # ─── VARIANTE 2: jurisdicción DETERMINADA ───
     if codigo:
-        is_caba = cm_es_caba(codigo)
-        jurisd = 'CABA' if is_caba else 'PCIA'
+        sufijo, is_caba, en_mapping = sufijo_summary_rechazo(codigo)
         color = '11' if is_caba else '10'  # rojo CABA, verde Pcia
         eventos = []
-        _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {jurisd}", color)
+        _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {sufijo}", color)
         if not is_caba:
-            _dup(eventos, f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DIAS) {jurisd}", color)
+            _dup(eventos, f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DIAS) {sufijo}", color)
         return {
             'fecha_evento': eventos[0]['fecha_evento'],
             'summary': eventos[0]['summary'],
             'aviso_cliente': None, 'eventos_extra': eventos,
             'subtipo': 'clausura_caba' if is_caba else 'clausura_pcia',
+            'codigo_cm': codigo,
+            'cm_en_mapping': en_mapping,
             'calendar_override': eventos[0]['calendar_override'],
             'colorId_override': color,
         }
@@ -927,11 +980,18 @@ Reportar: total procesadas, agendadas por tipo, avisos WA enviados a clientes, s
   como 5º argumento a `fn_armar_reporte_agendar_srt`. La función arma el bloque
   "⚠️ CLAUSURAS — JURISDICCIÓN NO DETERMINADA" en el reporte WA.
   Migración aplicada 2026-05-11 (`fn_armar_reporte_agendar_srt_jurisdiccion_no_determinada`).
-- **Convención de sufijo en summary** (v1.4.0): los rechazos terminan EXACTO
-  en ` CABA` o ` PCIA` (no se pone ciudad ni código de CM en el summary). El
-  skill `control-clausuras-srt` flaggea summaries con sufijos viejos
-  (`MAR DEL PLATA`, `LA PLATA`, `CM 37`, etc.) como `SUMMARY VIEJO` para
-  normalizar manualmente.
+- **Convención de sufijo en summary** (v1.5.0): los rechazos llevan código de
+  CM + ciudad real + jurisdicción explícita, derivado del mapping
+  `cm_jurisdicciones` (Supabase):
+  - CABA → `... (15 DIAS) CM 10L CABA`
+  - Pcia → `... (15 DIAS) CM 37 QUILMES (PCIA)`  /  `... (90 DIAS) CM 37 QUILMES (PCIA)`
+  - Código no en mapping → `... (15 DIAS) CM 99` (fallback visible; sembrar
+    la fila en `cm_jurisdicciones` cuando aparezca un código nuevo).
+  - Caso `no_determinada` (sin código) → `... CABA` / `... PCIA` puros
+    (agenda las dos jurisdicciones).
+  El skill `control-clausuras-srt` flaggea summaries con convención vieja
+  (`MAR DEL PLATA` solo, `LA PLATA` solo, sin código de CM) como `SUMMARY VIEJO`
+  para normalizar manualmente.
 - **Traslado de Apelación y Agravios**: pendiente Fase 3. Requiere leer texto y detectar si apeló ART; solo en ese caso agendar 10 hábiles para contestar agravios.
 - **Parseo frágil**: los regex de citaciones asumen el template estándar SRT. Si cambia el formato del PDF, el parseo falla y aparece en "errores de procesamiento" sin romper el resto.
 - **Normalización teléfono cliente**: formato esperado por `wa-send` es `5491XXXXXXXX@s.whatsapp.net` o solo dígitos `5491XXXXXXXX`. Normalizar antes de POST.
