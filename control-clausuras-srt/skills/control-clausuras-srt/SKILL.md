@@ -9,7 +9,7 @@ description: >
   usuario pida: "control clausuras", "revisar dispos SRT", "chequear vencimientos
   clausura", "briefing clausuras". Triggers: "control clausuras", "dispos SRT",
   "vencimientos clausura", "clausuras srt".
-version: 2.0.0
+version: 2.1.0
 ---
 
 # Control de Clausuras SRT
@@ -21,11 +21,18 @@ Chequeo semanal (lunes 10:00 AR): verificar que toda Disposición de Clausura te
 ## REGLAS CLAVE
 
 - **Día 1** = día hábil SIGUIENTE a la notificación (`fecha_notificacion`)
-- **CABA** (CM = "CABA" o "CM 10L"): 1 evento a 15 días hábiles
-- **Pcia BsAs** (CM con ciudad bonaerense): 2 eventos — 15 d.h. + 90 d.h. (el 90d es el principal/crítico)
+- **Jurisdicción se decide por el CÓDIGO de la CM firmante** (no por la ciudad
+  de emisión ni por la jurisdicción del cliente):
+  - CABA: códigos `10`, `10L`, `10A` → 1 evento a 15 d.h., color rojo
+  - Pcia: cualquier otro código → 2 eventos (15 d.h. + 90 d.h.), color verde
+  - No determinada: la skill `agendar-comunicaciones-srt` arma 3 eventos
+    (15d CABA + 15d PCIA + 90d PCIA) para cubrir ambas
+- **Summary nuevo**: termina exacto en `CABA` o `PCIA` (sin código `CM 37`, sin
+  ciudad `MAR DEL PLATA`). Eventos con sufijo viejo se reportan en
+  `SUMMARY VIEJO` para normalizar.
 - **Crítico** solo si el evento está DESPUÉS del vencimiento real. Si está antes o igual, OK (el estudio presenta temprano, no pierde plazo).
-- Solo auto-agendar si el plazo está vigente y el CM es conocido.
-- **Nunca modificar ni borrar** eventos existentes.
+- Solo auto-agendar si el plazo está vigente.
+- **Nunca modificar ni borrar** eventos creados por humanos.
 
 ## DATOS DE REFERENCIA
 
@@ -36,10 +43,15 @@ Chequeo semanal (lunes 10:00 AR): verificar que toda Disposición de Clausura te
 - **WhatsApp grupo** "Control Dispos SRT": chatId `120363182236641964@g.us`
 - **Edge function para enviar WA**: `https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/wa-send`
 
-### CM conocidas
+### Códigos de CM por jurisdicción
 
-- **CABA**: `CABA`, `CM 10L`
-- **Pcia BsAs**: cualquier CM que contenga `LA PLATA`, `LOMAS`, `BAHIA`/`BAHÍA`, `TANDIL`, `SAN ISIDRO`, `ZARATE`/`ZÁRATE`, `CAMPANA`, `MAR DEL PLATA`, `NECOCHEA`, `AZUL`, `LANUS`/`LANÚS`, `SAN MARTIN`/`SAN MARTÍN`, `PILAR`, `MORON`/`MORÓN`, `QUILMES`, `MORENO`, `MATANZA`, `SAN MIGUEL`, `AVELLANEDA`.
+La jurisdicción se decide únicamente con el código de la CM emisora del PDF
+(parseado por `detectar_cm_emisora`):
+
+- **CABA**: códigos que empiezan con `10` → `10`, `10L`, `10A`, etc.
+- **Pcia BsAs**: cualquier otro código (`11` La Plata, `12` Mar del Plata,
+  `13` Bahía Blanca, `37` Quilmes, `38` San Martín, `39` San Isidro, `124`,
+  `126`, etc.). No usamos el nombre de la ciudad — solo el código.
 
 ### Feriados AR
 
@@ -57,7 +69,7 @@ SELECT
   m.srt_expediente_nro AS srt,
   (m.fecha_notificacion AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS fecha_dispo,
   c.nombre,
-  c.comision_medica AS cm,
+  a.nombre AS adjunto_nombre,         -- nombre del PDF (fallback de CM sin OCR)
   a.texto_extraido AS texto_clausura,
   -- fallback si el PDF de la clausura aún no tiene texto extraído
   (SELECT a2.texto_extraido
@@ -78,36 +90,15 @@ ORDER BY m.fecha_notificacion ASC;
 ```
 
 → guardar como JSON array en `/tmp/clausuras.json` con estructura
-`[{srt, fecha_dispo, nombre, cm, texto_clausura, texto_dictamen_previo}, ...]`.
+`[{srt, fecha_dispo, nombre, adjunto_nombre, texto_clausura, texto_dictamen_previo}, ...]`.
 
-El texto sirve para clasificar cada clausura en 3 variantes:
+El texto sirve para clasificar cada clausura en 4 variantes:
 1. **Con acuerdo** (homologación del acuerdo) → 5 d.h. contestar intimación, color amarillo
 2. **Rechazo CABA** (CM 10/10L firma) → 15 d.h. apelar, color rojo
 3. **Rechazo Pcia** (cualquier otra CM firma) → 15 + 90 d.h. apelar, color verde
-
-### Paso 1b — Rellenar CM NULL con duplicados (UPDATE bulk)
-
-Ejecutar una sola query que actualiza en masa los CM NULL con CMs encontradas en duplicados del mismo `nombre`:
-
-```sql
-UPDATE casos_srt AS c SET comision_medica = dup.cm
-FROM (
-    SELECT DISTINCT ON (nombre) nombre, comision_medica AS cm
-    FROM casos_srt WHERE comision_medica IS NOT NULL
-    ORDER BY nombre, updated_at DESC NULLS LAST
-) dup
-WHERE c.comision_medica IS NULL
-  AND c.nombre = dup.nombre
-  AND c.numero_srt IN (
-    SELECT srt_expediente_nro FROM comunicaciones_miventanilla
-    WHERE tipo_comunicacion = 'Notificación de Acto Administrativo'
-      AND detalle ILIKE '%Clausura%'
-      AND fecha_notificacion >= (now() - interval '180 days')
-  )
-RETURNING c.numero_srt, c.nombre, c.comision_medica;
-```
-
-**IMPORTANTE**: después de correr este UPDATE, **re-ejecutar el query del Paso 1** para obtener `clausuras.json` con los CMs actualizados. Sin este refresh, los casos rellenados quedarían como NULL en el análisis.
+4. **Jurisdicción no determinada** (no se pudo leer la CM en PDF, dictamen previo
+   ni en el nombre del adjunto) → 15 d.h. CABA + 15 d.h. PCIA + 90 d.h. PCIA
+   (cubre ambas hasta que un humano confirme y borre el sobrante)
 
 ### Paso 1.5 — Bajar feriados AR
 
@@ -219,6 +210,13 @@ def detectar_cm_emisora(texto):
         if m: return m.group(1).strip().upper()
     return None
 
+def detectar_cm_de_nombre(nombre):
+    """Extrae el código de CM desde el nombre del adjunto. Fallback cuando
+    el PDF aún no tiene OCR. Ej: 'DI-2026-...-APN-SHC37%SRT.pdf' → '37'."""
+    if not nombre: return None
+    m = re.search(r'APN[^A-Za-z0-9]+SHC(\w+?)[#%]', nombre, re.I)
+    return m.group(1).strip().upper() if m else None
+
 def cm_es_caba(codigo):
     if not codigo: return None
     return bool(re.fullmatch(r'10[A-Z]*', codigo.strip().upper()))
@@ -287,6 +285,13 @@ for ev in events:
     if not t: continue
     st = ev.get('start_date')
     if not st: continue
+    # Convención NUEVA del estudio (v1.4.0+ de agendar-comunicaciones-srt):
+    # el summary de rechazos termina EXACTAMENTE en 'CABA' o 'PCIA' (no ciudad,
+    # no código de CM). Convención vieja: 'MAR DEL PLATA', 'LA PLATA', 'QUILMES',
+    # 'CM 37', etc. Detectamos cuál es leyendo el último token.
+    sufijo = s.rstrip().split(')')[-1].strip()  # texto después del último ')'
+    es_acuerdo = '(ACUERDO)' in s
+    normalizado = sufijo in ('CABA', 'PCIA') or es_acuerdo
     by_srt.setdefault(srt_norm, []).append({
         'id': ev.get('id'), 'tipo': t,
         'fecha': date.fromisoformat(st[:10]),
@@ -295,6 +300,10 @@ for ev in events:
         'summary': ev.get('summary'),
         'description': ev.get('description') or '',
         'caba_txt': 'CABA' in s,
+        'pcia_txt': 'PCIA' in s,
+        'sufijo': sufijo,
+        'normalizado': normalizado,
+        'es_acuerdo': es_acuerdo,
         'created': ev.get('created'),
     })
 
@@ -304,34 +313,47 @@ hace_7d = hoy - timedelta(days=7)
 to_create = []          # clausuras con evento faltante → agendar nuevo
 criticos = []           # evento agendado DESPUÉS del vencimiento real
 vencidos_sin_evento = []
-sin_caso = []
+sin_caso = []           # casi siempre vacío: solo si no hay nombre/srt para el caso
+no_determinada = []     # clausuras donde no se pudo leer la CM emisora del PDF
 agendados_ult_semana = []
 color_mal = []          # evento con colorId distinto al esperado
 jurisdiccion_mal = []   # evento dice "CABA" pero PDF dice Pcia o viceversa
+summary_viejo = []      # summary con ciudad/CM (convención vieja: MAR DEL PLATA, QUILMES, CM 37, …)
 duplicado_faltante = [] # clausura que debería estar en los 2 calendarios pero solo está en 1
 acuerdo_mal_agendado = []  # clausura con acuerdo que tiene evento de 15d/90d en vez de 5d
 
 def clasificar_variante(cl):
-    """Devuelve: ('acuerdo', 5, amarillo) o ('rechazo_caba', 15, rojo) o ('rechazo_pcia', 15+90, verde) o None."""
+    """Devuelve dict con la variante:
+
+    - 'acuerdo'         : 5 d.h. contestar intimación, color amarillo
+    - 'rechazo_caba'    : 15 d.h. apelar, color rojo (CM 10/10L/10A firma)
+    - 'rechazo_pcia'    : 15 + 90 d.h. apelar, color verde (cualquier otra CM)
+    - 'no_determinada'  : no se pudo leer la CM emisora — la skill agendar
+                          agenda 3 eventos (15d CABA + 15d PCIA + 90d PCIA).
+                          Acá se reporta como pendiente de confirmar.
+
+    Detección de CM (orden, todos miran al firmante, no a la oficina):
+      1. Texto del PDF de la clausura
+      2. Texto del dictamen previo del mismo SRT
+      3. Nombre del adjunto (`SHC37%SRT.pdf` → 37) — funciona sin OCR
+    NO se usa `casos_srt.comision_medica` (suele estar mal sembrado con la
+    jurisdicción del cliente y no del expediente).
+    """
     texto = cl.get('texto_clausura') or ''
     if es_clausura_con_acuerdo(texto):
         return {'variante': 'acuerdo', 'plazos': [5], 'color': COLOR_ACUERDO, 'tipos': ['5d']}
-    # Es rechazo → detectar jurisdicción por CM emisora del PDF
-    codigo = detectar_cm_emisora(texto) or detectar_cm_emisora(cl.get('texto_dictamen_previo'))
-    is_caba = None
-    if codigo:
-        is_caba = cm_es_caba(codigo)
-    else:
-        # Fallback al campo manual casos_srt.comision_medica
-        cm = (cl.get('cm') or '').upper()
-        if cm in ('CABA','CM 10','CM 10L'): is_caba = True
-        elif cm: is_caba = False
-    if is_caba is None:
-        return None  # no se puede clasificar
-    if is_caba:
+    codigo = (detectar_cm_emisora(texto)
+              or detectar_cm_emisora(cl.get('texto_dictamen_previo'))
+              or detectar_cm_de_nombre(cl.get('adjunto_nombre')))
+    if codigo is None:
+        # Jurisdicción no determinada. Default color verde (cubrir lado Pcia).
+        # El check de color/jurisdicción para esta variante se relaja porque
+        # conviven eventos CABA (rojo) y PCIA (verde) válidos.
+        return {'variante': 'no_determinada', 'plazos': [15, 90],
+                'color': COLOR_PCIA, 'tipos': ['15d', '90d']}
+    if cm_es_caba(codigo):
         return {'variante': 'rechazo_caba', 'plazos': [15], 'color': COLOR_CABA, 'tipos': ['15d']}
-    else:
-        return {'variante': 'rechazo_pcia', 'plazos': [15, 90], 'color': COLOR_PCIA, 'tipos': ['15d', '90d']}
+    return {'variante': 'rechazo_pcia', 'plazos': [15, 90], 'color': COLOR_PCIA, 'tipos': ['15d', '90d']}
 
 for cl in clausuras:
     dispo = date.fromisoformat(cl['fecha_dispo'])
@@ -341,15 +363,17 @@ for cl in clausuras:
     evs = by_srt.get(srt_norm, [])
 
     clasif = clasificar_variante(cl)
-    if clasif is None:
-        sin_caso.append({'srt':srt,'nombre':nombre,'dispo':dispo.isoformat(),
-                         'razon':'no hay texto PDF ni cm en casos_srt'})
-        continue
 
     # Fechas esperadas por plazo
     fechas_esp = {f'{n}d': sumar_dh(dispo, n) for n in clasif['plazos']}
     color_esp = clasif['color']
     variante = clasif['variante']
+
+    # Si no se pudo determinar la jurisdicción, registrarlo aparte para el
+    # reporte (la skill agendar ya agenda 3 eventos cubriendo ambas).
+    if variante == 'no_determinada':
+        no_determinada.append({'srt':srt,'nombre':nombre,'dispo':dispo.isoformat(),
+                               'razon':'no se pudo leer la CM emisora del PDF ni del nombre del adjunto'})
 
     # Detectar "acuerdo mal agendado": clausura es acuerdo pero hay evento 15d/90d
     if variante == 'acuerdo':
@@ -410,9 +434,9 @@ for cl in clausuras:
                                  'evento':e['fecha'].isoformat(),'real':esp.isoformat(),
                                  'diff':d,'evento_id':e['id'],'calendar':e['calendar_origin']})
 
-            # Check color
+            # Check color (skip para no_determinada: conviven rojo y verde válidos)
             color_actual = e.get('colorId')
-            if color_actual and color_actual != color_esp:
+            if variante != 'no_determinada' and color_actual and color_actual != color_esp:
                 auto_fix = 'auto-agendado' in (e.get('description') or '').lower()
                 color_mal.append({
                     'srt':srt,'nombre':nombre,'tipo':tipo,
@@ -434,6 +458,18 @@ for cl in clausuras:
                         'nota':'el summary del evento y la jurisdicción según PDF no coinciden',
                     })
 
+            # Check summary "viejo": convención previa con ciudad o código de CM
+            # en lugar de CABA/PCIA. No es crítico (la jurisdicción puede ser
+            # correcta) pero queremos normalizar manualmente.
+            if variante in ('rechazo_caba','rechazo_pcia','no_determinada') and not e.get('normalizado'):
+                auto_fix = 'auto-agendado' in (e.get('description') or '').lower()
+                summary_viejo.append({
+                    'srt':srt,'nombre':nombre,'tipo':tipo,
+                    'evento_id':e['id'],'calendar':e['calendar_origin'],
+                    'summary':e['summary'],'sufijo_actual':e.get('sufijo',''),
+                    'variante':variante,'auto_fix':auto_fix,
+                })
+
             # Registro de agendados última semana
             if e.get('created'):
                 try:
@@ -453,16 +489,19 @@ json.dump({
     'criticos':criticos,
     'vencidos':vencidos_sin_evento,
     'sin_caso':sin_caso,
+    'no_determinada':no_determinada,
     'agendados_ult_semana':agendados_ult_semana,
     'color_mal':color_mal,
     'jurisdiccion_mal':jurisdiccion_mal,
+    'summary_viejo':summary_viejo,
     'duplicado_faltante':duplicado_faltante,
     'acuerdo_mal_agendado':acuerdo_mal_agendado,
 }, open('/tmp/analisis.json','w'))
 print(f'Total: {len(clausuras)} | Agendar: {len(to_create)} | Críticos fecha: {len(criticos)} | '
       f'Color mal: {len(color_mal)} | Jurisdicción mal: {len(jurisdiccion_mal)} | '
-      f'Duplicado faltante: {len(duplicado_faltante)} | Acuerdo mal agendado: {len(acuerdo_mal_agendado)} | '
-      f'Vencidos: {len(vencidos_sin_evento)} | Sin caso: {len(sin_caso)}')
+      f'Summary viejo: {len(summary_viejo)} | Duplicado faltante: {len(duplicado_faltante)} | '
+      f'Acuerdo mal agendado: {len(acuerdo_mal_agendado)} | Vencidos: {len(vencidos_sin_evento)} | '
+      f'Sin caso: {len(sin_caso)} | No determinada: {len(no_determinada)}')
 ```
 
 Correr: `python3 /tmp/check.py`
@@ -563,8 +602,10 @@ L = [f'📋 *CONTROL CLAUSURAS SRT* — {hoy.strftime("%d/%m/%Y")}']
 resumen = (f'Agendados: {len(agendados_reales)} | Colores corregidos: {len(colores_corregidos)} | '
            f'Duplicados creados: {len(duplicados_creados)} | Críticos fecha: {len(d["criticos"])} | '
            f'Color mal: {len(d["color_mal"])} | Jurisdicción mal: {len(d["jurisdiccion_mal"])} | '
+           f'Summary viejo: {len(d.get("summary_viejo",[]))} | '
            f'Duplicado faltante: {len(d["duplicado_faltante"])} | Acuerdo mal: {len(d["acuerdo_mal_agendado"])} | '
-           f'Vencidos s/evento: {len(d["vencidos"])} | Sin caso: {len(d["sin_caso"])}')
+           f'Vencidos s/evento: {len(d["vencidos"])} | Sin caso: {len(d["sin_caso"])} | '
+           f'No determinada: {len(d.get("no_determinada",[]))}')
 L.append(resumen)
 
 if agendados_reales:
@@ -599,6 +640,17 @@ if d['jurisdiccion_mal']:
     for j in d['jurisdiccion_mal']:
         L.append(f"• {j['nombre']} ({j['srt']}) {j['tipo']}: {j['summary'][:60]} → PDF dice {j['variante_real']}")
 
+if d.get('summary_viejo'):
+    L.append('\n📝 *SUMMARY VIEJO — sufijo ciudad/CM en lugar de CABA/PCIA*')
+    for s in d['summary_viejo']:
+        marca = ' (auto)' if s.get('auto_fix') else ''
+        L.append(f"• {s['nombre']} ({s['srt']}) {s['tipo']}: …{s.get('sufijo_actual','')}{marca}  [{s['calendar']}]")
+
+if d.get('no_determinada'):
+    L.append('\n❓ *JURISDICCIÓN NO DETERMINADA — confirmar manualmente cuál corresponde*')
+    for n in d['no_determinada']:
+        L.append(f"• {n['nombre']} ({n['srt']}) dispo {n['dispo']} — {n.get('razon','')}")
+
 if d['duplicado_faltante']:
     pendientes = [x for x in d['duplicado_faltante'] if 'auto-agendado' not in (x.get('description') or '').lower()]
     if pendientes:
@@ -630,6 +682,7 @@ if d['agendados_ult_semana']:
 nada_que_reportar = not any([
     agendados_reales, colores_corregidos, duplicados_creados,
     d['criticos'], d['color_mal'], d['jurisdiccion_mal'],
+    d.get('summary_viejo'), d.get('no_determinada'),
     d['duplicado_faltante'], d['acuerdo_mal_agendado'],
     d['vencidos'], d['sin_caso'], d['agendados_ult_semana'],
 ])
@@ -694,6 +747,8 @@ Armar `criticos_consolidado` como:
 criticos_consolidado = {
     'fecha': d['criticos'], 'color_mal': d['color_mal'],
     'jurisdiccion_mal': d['jurisdiccion_mal'],
+    'summary_viejo': d.get('summary_viejo', []),
+    'no_determinada': d.get('no_determinada', []),
     'duplicado_faltante': d['duplicado_faltante'],
     'acuerdo_mal_agendado': d['acuerdo_mal_agendado'],
     'colores_corregidos': colores_corregidos,
@@ -723,6 +778,8 @@ clausuras = json.load(open('/tmp/clausuras.json'))
 criticos_consolidado = {
     'fecha': d['criticos'], 'color_mal': d['color_mal'],
     'jurisdiccion_mal': d['jurisdiccion_mal'],
+    'summary_viejo': d.get('summary_viejo', []),
+    'no_determinada': d.get('no_determinada', []),
     'duplicado_faltante': d['duplicado_faltante'],
     'acuerdo_mal_agendado': d['acuerdo_mal_agendado'],
     'colores_corregidos': colores_corregidos,

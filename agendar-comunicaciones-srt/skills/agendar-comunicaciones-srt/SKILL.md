@@ -11,10 +11,10 @@ description: >
   `adjuntos_miventanilla.texto_extraido`). Marca cada comunicación como
   procesada. Reporte diario al grupo "Claude SRT". Triggers: "agendar
   comunicaciones SRT", "procesar comunicaciones", "mi ventanilla".
-version: 1.3.0
+version: 1.4.0
 ---
 
-# Agendar Comunicaciones SRT — v1.3.0
+# Agendar Comunicaciones SRT — v1.4.0
 
 ## OBJETIVO
 
@@ -33,6 +33,7 @@ Chequeo diario (L-V 9am AR) de comunicaciones nuevas de Mi Ventanilla con plazo 
 | **Clausura con acuerdo** (homologación) | **5d contestar intimación** | **Principal + ✱ Vencimientos** | No |
 | **Clausura rechazo / divergencia CABA** | **15d apelar** | **Principal + ✱ Vencimientos** | No |
 | **Clausura rechazo / divergencia Pcia** | **15d + 90d apelar** | **Principal + ✱ Vencimientos** | No |
+| **Clausura rechazo / jurisdicción no determinada** | **15d CABA + 15d Pcia + 90d Pcia** (cubre ambas) | **Principal + ✱ Vencimientos** | No |
 
 Nota: las clausuras también las verifica el skill `control-clausuras-srt` los lunes. Acá se **crean diariamente** apenas llegan, el otro skill **controla** que estén bien agendadas. Dos IAs, un fiscaliza lo de la otra.
 
@@ -85,9 +86,9 @@ SELECT m.id AS comunicacion_id,
   m.tipo_comunicacion,
   m.detalle,                         -- necesario para detectar Clausura
   c.nombre AS nombre_actor,
-  c.comision_medica AS cm,          -- fallback final de CM si no se detecta del PDF
   c.wa_chat_id AS grupo_cliente_wa,  -- chat_id del grupo WhatsApp con el cliente
   a.texto_extraido,
+  a.nombre AS adjunto_nombre,        -- nombre del PDF (ej: DI-2026-...-APN-SHC37%SRT.pdf)
   -- Para clausuras: fallback al PDF del dictamen más reciente del mismo SRT
   -- (por si la clausura aún no tiene texto_extraido del scraper v2.5).
   (SELECT a2.texto_extraido
@@ -375,6 +376,16 @@ def detectar_cm_emisora(texto):
             return m.group(1).strip().upper()
     return None
 
+def detectar_cm_de_nombre(nombre):
+    """Extrae el código de la CM emisora desde el nombre del adjunto.
+    Fallback cuando el PDF todavía no tiene OCR (`texto_extraido` NULL).
+    Ej: 'DI-2026-38953648-APN-SHC37%SRT.pdf' → '37'
+        'DI-2026-...-APN-SHC10L#SRT.pdf'    → '10L'
+    """
+    if not nombre: return None
+    m = re.search(r'APN[^A-Za-z0-9]+SHC(\w+?)[#%]', nombre, re.I)
+    return m.group(1).strip().upper() if m else None
+
 def cm_es_caba(codigo):
     """CM 10 (y variantes 10L, 10A, etc.) → CABA. Cualquier otra → Pcia."""
     if not codigo: return None
@@ -398,21 +409,31 @@ def es_clausura_con_acuerdo(texto):
 def proc_clausura(c):
     """Notificación de Acto Administrativo con 'Clausura' en detalle.
 
-    Dos variantes según el texto del PDF:
+    Tres variantes:
 
     1) CLAUSURA CON ACUERDO (homologación): el trabajador y la ART firmaron un
        acuerdo. Plazo: 5 días hábiles para contestar intimación. Color amarillo.
-       Eventos all-day en calendar principal + ✱ Vencimientos.
 
-    2) CLAUSURA DE RECHAZO/DIVERGENCIA: no hubo acuerdo, o no tiene incapacidad.
-       Plazos: 15 días hábiles CABA (CM 10/10L), 15+90 días hábiles Pcia.
-       Color por jurisdicción: rojo CABA, verde Pcia. Eventos all-day en
-       calendar principal + ✱ Vencimientos.
+    2) CLAUSURA DE RECHAZO/DIVERGENCIA con jurisdicción CONOCIDA: leyendo qué CM
+       firma se decide CABA (códigos 10/10L/10A) o Pcia (cualquier otro código).
+       Summary termina en `CABA` o `PCIA` (no se pone nombre de ciudad ni código
+       de CM — la convención del estudio es la jurisdicción a secas).
+       Plazos: 15 d.h. CABA, 15 d.h. + 90 d.h. Pcia. Color rojo CABA, verde Pcia.
 
-    Detecta CABA/Pcia leyendo del PDF qué CM firma (la ciudad de emisión NO vale:
-    una clausura emitida desde SAN ISIDRO puede estar firmada por la CM 10 de CABA).
-    Fallback chain: texto de clausura → texto dictamen previo → casos_srt.comision_medica.
-    Si no se puede clasificar → retorna None (reporta para revisión manual).
+    3) CLAUSURA con jurisdicción NO DETERMINADA: no se pudo leer el código en
+       el PDF de la clausura, ni en el dictamen previo, ni en el nombre del
+       adjunto. Para no perder plazo, se agendan AMBAS jurisdicciones:
+       15 d.h. CABA + 15 d.h. PCIA + 90 d.h. PCIA. Aparece en el reporte como
+       "JURISDICCIÓN NO DETERMINADA — confirmar manualmente". Cuando se sepa
+       cuál era, un humano borra el sobrante.
+
+    Detección de CM (orden de fallback, todos miran al EMISOR — quien firma —
+    nunca al domicilio del cliente ni a la ciudad de emisión):
+      a) Texto del PDF de la clausura (`texto_extraido`)
+      b) Texto del dictamen médico previo del mismo SRT (`texto_dictamen_previo`)
+      c) Nombre del adjunto (`SHC37%SRT.pdf` → 37) — funciona sin OCR
+    NO usa `casos_srt.comision_medica` (campo poco confiable, suele estar mal
+    sembrado con la jurisdicción del cliente y no del expediente).
 
     NO manda aviso al cliente (es un plazo interno del estudio).
     """
@@ -445,36 +466,47 @@ def proc_clausura(c):
             'colorId_override': '5',
         }
 
-    # ─── VARIANTE 2: clausura de RECHAZO/DIVERGENCIA ───
+    # Detectar código de CM emisora (3 fallbacks, todos miran al firmante)
     codigo = (detectar_cm_emisora(texto)
-              or detectar_cm_emisora(c.get('texto_dictamen_previo')))
+              or detectar_cm_emisora(c.get('texto_dictamen_previo'))
+              or detectar_cm_de_nombre(c.get('adjunto_nombre')))
+
+    f15 = sumar_dh(notif, 15)
+    f90 = sumar_dh(notif, 90)
+
+    # ─── VARIANTE 2: jurisdicción DETERMINADA ───
     if codigo:
         is_caba = cm_es_caba(codigo)
-        ciudad = f'CM {codigo}' + (' (CABA)' if is_caba else '')
-    else:
-        cm_manual = (c.get('cm') or '').upper()
-        if cm_manual in ('CABA', 'CM 10L', 'CM 10'):
-            is_caba = True; ciudad = 'CABA'
-        elif cm_manual:
-            is_caba = False; ciudad = cm_manual
-        else:
-            return None  # reporta para revisión manual
+        jurisd = 'CABA' if is_caba else 'PCIA'
+        color = '11' if is_caba else '10'  # rojo CABA, verde Pcia
+        eventos = []
+        _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {jurisd}", color)
+        if not is_caba:
+            _dup(eventos, f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DIAS) {jurisd}", color)
+        return {
+            'fecha_evento': eventos[0]['fecha_evento'],
+            'summary': eventos[0]['summary'],
+            'aviso_cliente': None, 'eventos_extra': eventos,
+            'subtipo': 'clausura_caba' if is_caba else 'clausura_pcia',
+            'calendar_override': eventos[0]['calendar_override'],
+            'colorId_override': color,
+        }
 
-    color = '11' if is_caba else '10'  # rojo CABA, verde Pcia — toda la clausura misma jurisdicción
+    # ─── VARIANTE 3: jurisdicción NO DETERMINADA ───
+    # Sin código en ningún lado: cubrimos las DOS jurisdicciones para no perder
+    # ningún plazo. El reporte WA va a flaggear el caso para que un humano
+    # confirme y borre el sobrante.
     eventos = []
-    f15 = sumar_dh(notif, 15)
-    _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {ciudad}", color)
-    if not is_caba:
-        f90 = sumar_dh(notif, 90)
-        _dup(eventos, f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DÍAS) {ciudad}", color)
-
+    _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) CABA", '11')  # rojo
+    _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) PCIA", '10')  # verde
+    _dup(eventos, f90, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (90 DIAS) PCIA", '10')  # verde
     return {
         'fecha_evento': eventos[0]['fecha_evento'],
         'summary': eventos[0]['summary'],
         'aviso_cliente': None, 'eventos_extra': eventos,
-        'subtipo': 'clausura_caba' if is_caba else 'clausura_pcia',
+        'subtipo': 'clausura_jurisdiccion_no_determinada',
         'calendar_override': eventos[0]['calendar_override'],
-        'colorId_override': color,
+        'colorId_override': '11',
     }
 
 # Sentinel: los dispatchers lo devuelven cuando la comunicación no aplica a su sub-tipo.
@@ -871,6 +903,17 @@ Reportar: total procesadas, agendadas por tipo, avisos WA enviados a clientes, s
   plazo 3 hábiles p/ impugnar". El label por línea sale de un CASE sobre
   `tipo_comunicacion` ('ITM' vs 'DICT MED'). Ver
   `migrations/001_incluir_itm_en_reporte.sql` (aplicado 2026-04-30).
+- **Reporte WA — clausuras `jurisdiccion_no_determinada`** (v1.4.0): cuando
+  `proc_clausura` no puede leer la CM emisora y agenda los 3 eventos cubriendo
+  ambas jurisdicciones, el subtipo emitido es `clausura_jurisdiccion_no_determinada`.
+  La función `fn_armar_reporte_agendar_srt` debe sumar un bloque
+  "⚠️ JURISDICCIÓN NO DETERMINADA — confirmar manualmente y borrar el sobrante".
+  Pendiente migración SQL.
+- **Convención de sufijo en summary** (v1.4.0): los rechazos terminan EXACTO
+  en ` CABA` o ` PCIA` (no se pone ciudad ni código de CM en el summary). El
+  skill `control-clausuras-srt` flaggea summaries con sufijos viejos
+  (`MAR DEL PLATA`, `LA PLATA`, `CM 37`, etc.) como `SUMMARY VIEJO` para
+  normalizar manualmente.
 - **Traslado de Apelación y Agravios**: pendiente Fase 3. Requiere leer texto y detectar si apeló ART; solo en ese caso agendar 10 hábiles para contestar agravios.
 - **Parseo frágil**: los regex de citaciones asumen el template estándar SRT. Si cambia el formato del PDF, el parseo falla y aparece en "errores de procesamiento" sin romper el resto.
 - **Normalización teléfono cliente**: formato esperado por `wa-send` es `5491XXXXXXXX@s.whatsapp.net` o solo dígitos `5491XXXXXXXX`. Normalizar antes de POST.
