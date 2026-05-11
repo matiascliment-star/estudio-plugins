@@ -11,10 +11,10 @@ description: >
   `adjuntos_miventanilla.texto_extraido`). Marca cada comunicación como
   procesada. Reporte diario al grupo "Claude SRT". Triggers: "agendar
   comunicaciones SRT", "procesar comunicaciones", "mi ventanilla".
-version: 1.5.0
+version: 1.6.0
 ---
 
-# Agendar Comunicaciones SRT — v1.5.0
+# Agendar Comunicaciones SRT — v1.6.0
 
 ## OBJETIVO
 
@@ -396,6 +396,39 @@ def detectar_cm_de_nombre(nombre):
     m = re.search(r'APN[^A-Za-z0-9]+SHC(\w+?)[#%]', nombre, re.I)
     return m.group(1).strip().upper() if m else None
 
+def extraer_codigo_y_ciudad(texto):
+    """Extrae (código, ciudad) emisora desde el PDF de la dispo.
+    Se usa cuando aparece un código nuevo no sembrado en cm_jurisdicciones,
+    para auto-sembrar la fila sin intervención humana.
+
+    Patrones detectados (orden de especificidad):
+      1. 'Comisión Medica N° 37 de la localidad de QUILMES, Provincia …'
+      2. 'Comisión Medica N° 12 DELEGACION DOLORES, Provincia …'
+      3. 'Comisión Medica N° 10 de la Ciudad Autónoma de Buenos Aires' → CABA
+      4. 'Comisión Médica: 373 - QUILMES   Localidad: …'  (dictamen previo)
+    Devuelve (codigo, ciudad) o (None, None) si no matcha ningún patrón.
+    Ciudad viene en MAYÚSCULAS, sin tildes finales sobrantes.
+    """
+    if not texto: return (None, None)
+    # 1) "Comisión Medica N° 37 de la localidad de QUILMES,"
+    m = re.search(r'Comisi[oó]n\s+M[eé]dica\s+N[°º]?\s*(\w+)\s+de\s+la\s+localidad\s+de\s+([A-ZÁÉÍÓÚÜÑ\.\s]+?)\s*,', texto, re.I)
+    if m: return (m.group(1).strip().upper(), re.sub(r'\s+',' ',m.group(2).strip().upper()))
+    # 2) "Comisión Medica N° 12 DELEGACION DOLORES,"
+    m = re.search(r'Comisi[oó]n\s+M[eé]dica\s+N[°º]?\s*(\w+)\s+DELEGACION\s+([A-ZÁÉÍÓÚÜÑ\.\s]+?)\s*,', texto, re.I)
+    if m: return (m.group(1).strip().upper(), re.sub(r'\s+',' ',m.group(2).strip().upper()))
+    # 3) "Comisión Medica N° 10 de la Ciudad Autónoma…"
+    m = re.search(r'Comisi[oó]n\s+M[eé]dica\s+N[°º]?\s*(\w+)\s+de\s+la\s+Ciudad\s+Aut[oó]noma', texto, re.I)
+    if m: return (m.group(1).strip().upper(), 'CABA')
+    # 4) "Comisión Médica: 373 - QUILMES" (dictamen)
+    m = re.search(r'Comisi[oó]n\s+M[eé]dica\s*:\s*(\w+)\s*[-–]\s*([A-ZÁÉÍÓÚÜÑ\.\s]+?)(?:\s*Localidad|\s*\n|$)', texto, re.I)
+    if m: return (m.group(1).strip().upper(), re.sub(r'\s+',' ',m.group(2).strip().upper()))
+    return (None, None)
+
+# Lista global de filas nuevas a sembrar en cm_jurisdicciones.
+# Se llena cuando proc_clausura detecta un código sin mapping y puede extraer
+# la ciudad del PDF. El Paso 2.6 hace INSERT ON CONFLICT DO NOTHING al final.
+NUEVOS_CMS = []
+
 def cm_es_caba(codigo):
     """Fallback regex cuando un código no está en cm_jurisdicciones.
     CM 10 y variantes (10L, 10A) → CABA. Cualquier otra → Pcia."""
@@ -529,6 +562,39 @@ def proc_clausura(c):
     # ─── VARIANTE 2: jurisdicción DETERMINADA ───
     if codigo:
         sufijo, is_caba, en_mapping = sufijo_summary_rechazo(codigo)
+
+        # AUTO-SEMBRADO de cm_jurisdicciones (v1.6.0):
+        # Si el código no estaba en mapping pero podemos extraer la ciudad del
+        # mismo PDF, sembramos la fila para futuros runs y reconstruimos el
+        # sufijo canónico en este mismo evento. Sin intervención humana.
+        if not en_mapping:
+            _, ciudad_pdf = extraer_codigo_y_ciudad(texto)
+            if not ciudad_pdf:
+                _, ciudad_pdf = extraer_codigo_y_ciudad(c.get('texto_dictamen_previo') or '')
+            if ciudad_pdf:
+                # Es CABA si la ciudad parseada es 'CABA' o si el código empieza con 10
+                is_caba_seeded = (ciudad_pdf == 'CABA') or bool(cm_es_caba(codigo))
+                # Sembrar en NUEVOS_CMS (deduplicado por código) para INSERT al final
+                if codigo.upper() not in {x['codigo'] for x in NUEVOS_CMS}:
+                    NUEVOS_CMS.append({
+                        'codigo': codigo.upper(),
+                        'ciudad': ciudad_pdf,
+                        'es_caba': is_caba_seeded,
+                    })
+                # Actualizar mapping en memoria para que el resto del run lo use
+                CM_MAPPING[codigo.upper()] = {
+                    'codigo': codigo.upper(),
+                    'ciudad': ciudad_pdf,
+                    'es_caba': is_caba_seeded,
+                }
+                # Reconstruir sufijo canónico ahora que tenemos la ciudad
+                if is_caba_seeded:
+                    sufijo = f'CM {codigo} CABA'
+                else:
+                    sufijo = f'CM {codigo} {ciudad_pdf} (PCIA)'
+                is_caba = is_caba_seeded
+                en_mapping = True  # ya sembrado en memoria
+
         color = '11' if is_caba else '10'  # rojo CABA, verde Pcia
         eventos = []
         _dup(eventos, f15, f"{nombre} - {srt} - VENCE APELAR CLAUSURA (15 DIAS) {sufijo}", color)
@@ -623,8 +689,48 @@ for c in comunic:
 
 json.dump(procesadas, open('/tmp/procesadas.json','w'), default=str)
 json.dump(errores, open('/tmp/errores_proceso.json','w'))
-print(f'Procesadas: {len(procesadas)} | Errores de parseo: {len(errores)}')
+json.dump(NUEVOS_CMS, open('/tmp/nuevos_cms.json','w'), ensure_ascii=False)
+print(f'Procesadas: {len(procesadas)} | Errores de parseo: {len(errores)} | Nuevos CMs a sembrar: {len(NUEVOS_CMS)}')
+if NUEVOS_CMS:
+    for r in NUEVOS_CMS:
+        print(f"  → CM {r['codigo']} = {r['ciudad']} ({'CABA' if r['es_caba'] else 'PCIA'})")
 ```
+
+### Paso 2.6 — Auto-sembrar nuevos códigos en cm_jurisdicciones
+
+Si el Paso 2 detectó códigos de CM que no estaban en `cm_jurisdicciones` y pudo
+extraer la ciudad del PDF de la dispo, los siembra ahora con `INSERT ON CONFLICT
+DO NOTHING`. Esto permite que la skill sea autosuficiente: cuando aparece un
+código nuevo, la siguiente corrida ya lo reconoce sin intervención humana.
+
+Generar el SQL en Python (lee `/tmp/nuevos_cms.json` y arma un `INSERT … VALUES
+(…), (…), …`) y ejecutarlo via MCP Supabase. Si el archivo está vacío, saltar.
+
+```python
+import json
+nuevos = json.load(open('/tmp/nuevos_cms.json'))
+if not nuevos:
+    print('Sin nuevos CMs a sembrar.')
+else:
+    # Construir VALUES escapando comillas simples manualmente
+    def esc(s): return s.replace("'", "''")
+    rows = ','.join(
+        f"('{esc(r['codigo'])}', '{esc(r['ciudad'])}', {str(r['es_caba']).lower()}, 'auto-sembrado por agendar-comunicaciones-srt')"
+        for r in nuevos
+    )
+    sql = (
+        "INSERT INTO public.cm_jurisdicciones (codigo, ciudad, es_caba, notas) "
+        f"VALUES {rows} ON CONFLICT (codigo) DO NOTHING "
+        "RETURNING codigo, ciudad, es_caba;"
+    )
+    open('/tmp/seed_cm_sql.txt','w').write(sql)
+    print(f'SQL listo en /tmp/seed_cm_sql.txt ({len(nuevos)} filas a intentar)')
+```
+
+Después ejecutar ese SQL via `mcp__claude_ai_Supabase__execute_sql` con el
+contenido de `/tmp/seed_cm_sql.txt`. El `ON CONFLICT (codigo) DO NOTHING`
+garantiza idempotencia (si una corrida paralela ya sembró el código, esta
+queda sin efecto).
 
 ### Paso 2.5 — Generar `create_event_calls.json` con args EXACTOS
 
@@ -980,18 +1086,25 @@ Reportar: total procesadas, agendadas por tipo, avisos WA enviados a clientes, s
   como 5º argumento a `fn_armar_reporte_agendar_srt`. La función arma el bloque
   "⚠️ CLAUSURAS — JURISDICCIÓN NO DETERMINADA" en el reporte WA.
   Migración aplicada 2026-05-11 (`fn_armar_reporte_agendar_srt_jurisdiccion_no_determinada`).
-- **Convención de sufijo en summary** (v1.5.0): los rechazos llevan código de
+- **Convención de sufijo en summary** (v1.5.0+): los rechazos llevan código de
   CM + ciudad real + jurisdicción explícita, derivado del mapping
   `cm_jurisdicciones` (Supabase):
   - CABA → `... (15 DIAS) CM 10L CABA`
   - Pcia → `... (15 DIAS) CM 37 QUILMES (PCIA)`  /  `... (90 DIAS) CM 37 QUILMES (PCIA)`
-  - Código no en mapping → `... (15 DIAS) CM 99` (fallback visible; sembrar
-    la fila en `cm_jurisdicciones` cuando aparezca un código nuevo).
   - Caso `no_determinada` (sin código) → `... CABA` / `... PCIA` puros
     (agenda las dos jurisdicciones).
   El skill `control-clausuras-srt` flaggea summaries con convención vieja
   (`MAR DEL PLATA` solo, `LA PLATA` solo, sin código de CM) como `SUMMARY VIEJO`
   para normalizar manualmente.
+- **Auto-sembrado de `cm_jurisdicciones`** (v1.6.0): si aparece un código que
+  no está en la tabla pero el PDF de la dispo trae la ciudad en patrones
+  conocidos (`Comisión Medica N° X de la localidad de CIUDAD,`
+  `… DELEGACION CIUDAD,` `… de la Ciudad Autónoma`, `Comisión Médica: X - CIUDAD`),
+  la skill arma la fila `(codigo, ciudad, es_caba)` y la inserta automáticamente
+  en `cm_jurisdicciones` con `ON CONFLICT DO NOTHING` (Paso 2.6). Sin
+  intervención humana. Si la ciudad no se puede extraer del PDF tampoco
+  (PDF raro o sin OCR), recién ahí el sufijo queda como `CM <código>` y se
+  reporta para sembrado manual.
 - **Traslado de Apelación y Agravios**: pendiente Fase 3. Requiere leer texto y detectar si apeló ART; solo en ese caso agendar 10 hábiles para contestar agravios.
 - **Parseo frágil**: los regex de citaciones asumen el template estándar SRT. Si cambia el formato del PDF, el parseo falla y aparece en "errores de procesamiento" sin romper el resto.
 - **Normalización teléfono cliente**: formato esperado por `wa-send` es `5491XXXXXXXX@s.whatsapp.net` o solo dígitos `5491XXXXXXXX`. Normalizar antes de POST.
