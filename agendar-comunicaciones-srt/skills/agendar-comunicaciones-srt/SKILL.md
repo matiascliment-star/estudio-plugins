@@ -799,6 +799,10 @@ El único dato que el agente necesita proveer al SQL es:
 3. `sin_grupo_jsonb` — array jsonb con las citaciones sin `grupo_cliente_wa`
    (cada item tiene `nombre_actor`, `srt`, `aviso_cliente`).
 4. `avisos_enviados` — count de avisos WA al cliente que salieron OK.
+5. `no_determinada_jsonb` — array jsonb con las clausuras donde no se pudo leer
+   la CM emisora (subtipo `clausura_jurisdiccion_no_determinada`). Cada item
+   tiene `nombre_actor`, `srt`, `fecha_notif`, `razon`. La función arma un
+   bloque "⚠️ JURISDICCIÓN NO DETERMINADA" para que un humano confirme.
 
 Recolectá esos datos con un script Python chiquito (no releer `/tmp/procesadas.json`
 entero — solo los campos necesarios para esos 3 inputs):
@@ -826,10 +830,22 @@ sin_grupo = [
   if p.get('aviso_cliente') and not p.get('grupo_cliente_wa')
 ]
 
+# Clausuras donde no se pudo determinar la jurisdicción (subtipo emitido por
+# proc_clausura cuando ninguno de los 3 fallbacks detectó la CM emisora).
+no_determinada = [
+  {'nombre_actor': p.get('nombre_actor') or '?',
+   'srt': p.get('srt') or '?',
+   'fecha_notif': p.get('fecha_notif') or '?',
+   'razon': 'CM emisora no detectada en PDF, dictamen previo ni nombre del adjunto — agendado en ambas jurisdicciones'}
+  for p in procesadas
+  if p.get('subtipo') == 'clausura_jurisdiccion_no_determinada'
+]
+
 avisos_ok = sum(1 for p in procesadas if p.get('aviso_ok'))
 
 open('/tmp/errores_min.json','w').write(json.dumps(errores_min, ensure_ascii=False))
 open('/tmp/sin_grupo_min.json','w').write(json.dumps(sin_grupo, ensure_ascii=False))
+open('/tmp/no_determinada_min.json','w').write(json.dumps(no_determinada, ensure_ascii=False))
 open('/tmp/avisos_ok.txt','w').write(str(avisos_ok))
 print('ready')
 ```
@@ -867,7 +883,8 @@ SELECT
     '<INICIO_RUN_ISO>'::timestamptz,
     '<ERRORES_JSONB>'::jsonb,
     '<SIN_GRUPO_JSONB>'::jsonb,
-    <AVISOS_ENVIADOS_INT>
+    <AVISOS_ENVIADOS_INT>,
+    '<NO_DETERMINADA_JSONB>'::jsonb
   )
 RETURNING id, whatsapp_jobid;
 ```
@@ -906,9 +923,10 @@ Reportar: total procesadas, agendadas por tipo, avisos WA enviados a clientes, s
 - **Reporte WA — clausuras `jurisdiccion_no_determinada`** (v1.4.0): cuando
   `proc_clausura` no puede leer la CM emisora y agenda los 3 eventos cubriendo
   ambas jurisdicciones, el subtipo emitido es `clausura_jurisdiccion_no_determinada`.
-  La función `fn_armar_reporte_agendar_srt` debe sumar un bloque
-  "⚠️ JURISDICCIÓN NO DETERMINADA — confirmar manualmente y borrar el sobrante".
-  Pendiente migración SQL.
+  El Python del Paso 7 lo recolecta como `no_determinada_jsonb` y se lo pasa
+  como 5º argumento a `fn_armar_reporte_agendar_srt`. La función arma el bloque
+  "⚠️ CLAUSURAS — JURISDICCIÓN NO DETERMINADA" en el reporte WA.
+  Migración aplicada 2026-05-11 (`fn_armar_reporte_agendar_srt_jurisdiccion_no_determinada`).
 - **Convención de sufijo en summary** (v1.4.0): los rechazos terminan EXACTO
   en ` CABA` o ` PCIA` (no se pone ciudad ni código de CM en el summary). El
   skill `control-clausuras-srt` flaggea summaries con sufijos viejos
