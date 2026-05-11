@@ -38,18 +38,24 @@ Ver detalles en `reglas-procesales.md` (este archivo se inyecta en el prompt de 
 ### Fase 1: Selección top 20+20
 
 Supabase project `wdgdbbcwcrirpnfdmykh`. La query calcula `dr = plazo - (hoy - fecha_ref)` donde:
-- `fecha_ref = MAX(ultimo_impulso_propio, último movimiento real, último click válido)`
+- `fecha_ref = MAX(último escrito presentado por nosotros, último movimiento del tribunal)`
 - `plazo = expedientes.plazo_caducidad` (si está), sino por default: Cámara=90, CABA 1ra=180, resto=90.
 
-**Click válido** (de `impulsos_caducidad`): el click sirve para "tapar" el expediente y sacarlo de la corrida mientras la chica tiene tiempo de subir el escrito. Vale si:
-1. Tiene escrito asociado (`escrito_id IS NOT NULL`) — ya se cumplió el impulso, **O**
-2. Es de los últimos 40 días **Y** el `dr` calculado SIN considerar el click (es decir, contra el último movimiento real + último impulso propio) es **mayor a 5 días**.
+**Fuentes de `fecha_ref`** — mismas que usa la solapa "Caducidad" del frontend:
+- `escritos_expediente.fecha` con `presentado = true` (PJN).
+- `escritos_scba.fecha_presentacion` (Provincia — siempre presentados).
+- `movimientos_pjn.fecha` + `movimientos_judicial.fecha` (último despacho del tribunal).
 
-La regla "40 días Y dr_sin_click > 5" garantiza:
-- Si la chica clickeó pero después no subió escrito, el expediente no vuelve a aparecer durante 40 días (evita que reaparezca a los 7 y le queden todos los de 90 días repitiéndose sin que pueda dejar otro escrito).
-- Pero si el expediente está a ≤5 días de caducar, el click se ignora y vuelve a entrar a la corrida — los críticos nunca quedan tapados.
+⚠️ **NO usar `expedientes.ultimo_impulso_propio`** — ese campo está siendo pisado por la app con cada click sin escrito asociado (bug del frontend), así que mentiría la fecha de caducidad. Mientras eso no se arregle en `src/App.jsx`, la corrida lo ignora.
 
-La query corre todos los días: el chequeo `dr_sin_click > 5` se reevalúa diariamente, así que un click cuando faltaban 10 días deja de tapar al llegar a los 5.
+**Click oculta, no corre la fecha.** El click en la solapa "Caducidad" sirve para **ocultar** el expediente de las corridas durante 40 días — NO para correr la fecha de caducidad real (que sigue dependiendo del último escrito/movimiento). Un expediente queda oculto si tiene en `impulsos_caducidad` algún registro que cumple:
+1. `escrito_id IS NOT NULL` — ya se atribuyó un escrito real, **O**
+2. `fecha_click > hoy - 40 días` **Y** `dr > 5` — ventana de gracia, salvo que falte poco para caducar.
+
+Garantías:
+- Si la chica clickeó pero después no subió el escrito, el expediente no vuelve a la corrida durante 40 días corridos.
+- Si el expediente está a ≤5 días de caducar (`dr ≤ 5`), el click se ignora y entra a la corrida igual — los críticos nunca quedan tapados.
+- El `dr` mostrado es el **real** (medido contra el último escrito/movimiento), idéntico al de la solapa "Caducidad" — corrida y UI siempre coinciden.
 
 > **Nota sobre múltiples corridas el mismo día:** la corrida diaria corre 1 sola vez por día (cron 7am). Las corridas adicionales (botón "Pedir más") las maneja el skill `pedir-mas-caducidad`, que ya excluye los expedientes presentes en `caducidad_corridas` de hoy. Por eso este SKILL no necesita una regla de "tapa por el día calendario": no aplica.
 
@@ -61,44 +67,28 @@ WITH ult_mov AS (
   UNION ALL
   SELECT expediente_id, MAX(fecha) AS fecha FROM movimientos_judicial GROUP BY expediente_id
 ),
-agg AS (SELECT expediente_id, MAX(fecha) AS fecha FROM ult_mov GROUP BY expediente_id),
--- Calculamos primero la fecha_ref y el plazo SIN considerar el click,
--- para poder evaluar si el click "tapa" o no al expediente.
-sin_click AS (
-  SELECT
-    e.id AS expediente_id,
-    GREATEST(
-      COALESCE(e.ultimo_impulso_propio, '1900-01-01'::date),
-      COALESCE(a.fecha, '1900-01-01'::date)
-    ) AS fecha_ref_sin_click,
-    COALESCE(e.plazo_caducidad,
-      CASE
-        WHEN LOWER(COALESCE(e.instancia_actual,'')) IN ('camara','cámara','corte') THEN 90
-        WHEN LOWER(COALESCE(e.juzgado,'')) LIKE '%sala %' OR LOWER(COALESCE(e.juzgado,'')) LIKE '%cámara%' THEN 90
-        WHEN e.jurisdiccion = 'CABA' THEN 180 ELSE 90
-      END) AS plazo
-  FROM expedientes e
-  LEFT JOIN agg a ON a.expediente_id = e.id
+agg_mov AS (
+  SELECT expediente_id, MAX(fecha) AS fecha FROM ult_mov GROUP BY expediente_id
 ),
--- Click válido: 2 reglas (ver explicación arriba).
---   1) escrito asociado: ya se cumplió el impulso.
---   2) últimos 40 días Y dr_sin_click > 5: ventana larga, salvo que falte poco para caducar.
-ult_click AS (
-  SELECT ic.expediente_id, MAX(ic.fecha_click) AS fecha
-  FROM impulsos_caducidad ic
-  JOIN sin_click sc ON sc.expediente_id = ic.expediente_id
-  WHERE ic.escrito_id IS NOT NULL
-     OR (ic.fecha_click > CURRENT_DATE - INTERVAL '40 days'
-         AND (sc.plazo - (CURRENT_DATE - sc.fecha_ref_sin_click)) > 5)
-  GROUP BY ic.expediente_id
+-- Último escrito presentado por nosotros — fuente idéntica al frontend (solapa Caducidad).
+ult_esc AS (
+  SELECT expediente_id, MAX(fecha) AS fecha
+  FROM escritos_expediente
+  WHERE presentado = true AND fecha IS NOT NULL
+  GROUP BY expediente_id
+  UNION ALL
+  SELECT expediente_id, MAX(NULLIF(fecha_presentacion,'')::date) AS fecha
+  FROM escritos_scba
+  WHERE fecha_presentacion IS NOT NULL AND fecha_presentacion <> ''
+  GROUP BY expediente_id
 ),
+agg_esc AS (SELECT expediente_id, MAX(fecha) AS fecha FROM ult_esc GROUP BY expediente_id),
 base AS (
   SELECT
     e.id, e.numero, e.caratula, e.jurisdiccion,
     GREATEST(
-      COALESCE(e.ultimo_impulso_propio, '1900-01-01'::date),
-      COALESCE(a.fecha, '1900-01-01'::date),
-      COALESCE(uc.fecha, '1900-01-01'::date)
+      COALESCE(ae.fecha, '1900-01-01'::date),
+      COALESCE(am.fecha, '1900-01-01'::date)
     ) AS fecha_ref,
     COALESCE(e.plazo_caducidad,
       CASE
@@ -109,8 +99,8 @@ base AS (
     e.mev_idc, e.mev_ido, e.link_causa, e.estado, e.instancia_actual, e.resumen_ia,
     e.onedrive_id, e.onedrive_url
   FROM expedientes e
-  LEFT JOIN agg a ON a.expediente_id = e.id
-  LEFT JOIN ult_click uc ON uc.expediente_id = e.id
+  LEFT JOIN agg_mov am ON am.expediente_id = e.id
+  LEFT JOIN agg_esc ae ON ae.expediente_id = e.id
   WHERE COALESCE(e.excluido_caducidad, false) = false
     AND COALESCE(e.excluido_caducidad_temporal, false) = false
     -- Excluir todos los estados terminales (80-84): Finalizado, Conciliado,
@@ -127,6 +117,16 @@ ranked AS (
     ROW_NUMBER() OVER (PARTITION BY jurisdiccion ORDER BY (plazo - (CURRENT_DATE - fecha_ref)) ASC, id ASC) AS rn
   FROM base
   WHERE fecha_ref > '1900-01-01'::date
+    -- Click oculta por 40 días, salvo que falten ≤5 días para caducar.
+    AND NOT EXISTS (
+      SELECT 1 FROM impulsos_caducidad ic
+      WHERE ic.expediente_id = base.id
+        AND (
+          ic.escrito_id IS NOT NULL
+          OR (ic.fecha_click > CURRENT_DATE - INTERVAL '40 days'
+              AND (base.plazo - (CURRENT_DATE - base.fecha_ref)) > 5)
+        )
+    )
 )
 SELECT id, numero, caratula, jurisdiccion, estado, instancia_actual,
        fecha_ref, plazo, (CURRENT_DATE - fecha_ref) AS diff_dias, dr,
