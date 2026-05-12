@@ -5,7 +5,7 @@ description: >
   Para cada caso con `wa_chat_id` matcheado: lee los últimos 30 días del grupo
   de WhatsApp y, vía LLM, decide si el cliente ya tiene alta médica. Si la
   detecta con confianza, promueve automáticamente el caso a POR_INICIAR
-  (etapa=POR_INICIAR, clasificacion_pre_srt='LISTA_SIN_SECUELAS', fecha_alta
+  (etapa=POR_INICIAR, clasificacion_pre_srt='PENDIENTE_CONTACTO', fecha_alta
   si la extrajo). Si hace ≥7 días que el cliente no escribe, envía un ping
   proactivo preguntando cómo va el tratamiento (idempotente: no más de 1 ping
   por día por caso). Reporta al grupo "WA Claude SRT". Triggers:
@@ -92,7 +92,7 @@ propio razonamiento (sos el LLM). Buscás:
 ```sql
 UPDATE casos_srt
 SET etapa = 'POR_INICIAR',
-    clasificacion_pre_srt = 'LISTA_SIN_SECUELAS',
+    clasificacion_pre_srt = 'PENDIENTE_CONTACTO',  -- siempre PENDIENTE_CONTACTO: hay que llamar al cliente para el relato antes de iniciar
     fecha_alta = COALESCE(fecha_alta, <fecha_extraida_o_NULL>),
     notas = COALESCE(notas, '') || E'\n\n--- ' || to_char(NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires', 'DD/MM/YYYY') || ' Promoción automática TRATAMIENTO→POR_INICIAR ---\n' ||
             'Evidencia WhatsApp: "<frase clave del mensaje del cliente>" (' || <fecha_msg> || ')',
