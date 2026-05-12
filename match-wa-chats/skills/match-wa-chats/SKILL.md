@@ -10,7 +10,7 @@ description: >
   Idempotente: sólo procesa filas con `wa_chat_id IS NULL`. Reporta por
   WhatsApp al grupo "WA Claude SRT". Triggers: "match wa chats", "matchear
   whatsapp", "corrida wa_chat_id".
-version: 2.0.0
+version: 2.1.0
 ---
 
 # Match wa_chat_id en casos_srt + expedientes
@@ -164,6 +164,40 @@ RETURNING e.id, e.caratula, e.wa_chat_id;
 
 Contá filas devueltas = `matcheados_expedientes`.
 
+### Paso 1C — Vincular `expedientes.caso_srt_id` por `wa_chat_id` compartido
+
+Cuando un expediente y un caso SRT activo comparten el mismo `wa_chat_id`,
+podemos asumir que son del mismo cliente y vincularlos por FK. Sólo
+auto-vinculamos si el cliente tiene **un único** caso SRT activo con ese
+chat (sin ambigüedad por múltiples accidentes).
+
+Esto alimenta el panel "Cliente 360°" del front sin requerir intervención
+manual.
+
+```sql
+WITH cs_unicos AS (
+  SELECT wa_chat_id, MIN(id) AS caso_id
+  FROM casos_srt
+  WHERE activo = true AND wa_chat_id IS NOT NULL
+  GROUP BY wa_chat_id
+  HAVING COUNT(*) = 1
+)
+UPDATE expedientes e
+SET caso_srt_id = cs.caso_id
+FROM cs_unicos cs
+WHERE e.wa_chat_id = cs.wa_chat_id
+  AND e.caso_srt_id IS NULL
+  AND (e.estado IS NULL OR e.estado != '80 Finalizado')
+RETURNING e.id, e.caratula, e.caso_srt_id;
+```
+
+Contá filas devueltas = `vinculados_fk_caso_srt`. Si <= 30 guardá lista
+(carátula truncada + caso_srt_id), si más solo el conteo.
+
+**Importante**: no tocar etapas en esta operación. La vinculación de FK
+es para vista 360°; las transiciones de etapa las maneja el skill
+`seguimiento-tratamiento-llm` u otros flujos.
+
 ### Paso 2 — Detectar ambiguos (para el reporte)
 
 Mismo SQL que paso 1A/1B pero terminando con `HAVING COUNT(DISTINCT chat_id) > 1`
@@ -183,7 +217,10 @@ SELECT
      AND (estado IS NULL OR estado != '80 Finalizado'))               AS exp_con_wa,
   (SELECT COUNT(*) FROM expedientes
    WHERE caratula_actor_norm IS NOT NULL
-     AND (estado IS NULL OR estado != '80 Finalizado'))               AS exp_total;
+     AND (estado IS NULL OR estado != '80 Finalizado'))               AS exp_total,
+  (SELECT COUNT(*) FILTER (WHERE caso_srt_id IS NOT NULL)
+   FROM expedientes
+   WHERE (estado IS NULL OR estado != '80 Finalizado'))               AS exp_con_caso_srt;
 ```
 
 ### Paso 4 — Enviar reporte por WhatsApp
@@ -197,6 +234,7 @@ Formato del texto:
 🧩 *MATCH WA_CHAT_ID* — DD/MM/YYYY HH24:MI
 📋 casos_srt: matcheados hoy X | total con WA Y/Z | ambiguos N
 📁 expedientes: matcheados hoy X | total con WA Y/Z | ambiguos N
+🔗 expedientes ↔ caso_srt (FK 360°): vinculados hoy X | total V/W
 
 ✅ Matcheados hoy casos_srt (si ≤30):
 • NOMBRE → chat_name_grupo
