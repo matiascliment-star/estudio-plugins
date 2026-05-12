@@ -2,26 +2,43 @@
 name: backfill-firmados-archivo
 description: >
   Procesa un export de WhatsApp del grupo "FIRMÓ 🖋️📈" (archivo `_chat.txt`)
-  y detecta qué firmados están cargados en `casos_srt` y cuáles se perdieron.
-  Para los faltantes desde una fecha de corte (default 2026-01-01), reporta
-  nombre, teléfono y alta médica detectada, y opcionalmente los crea
-  automáticamente en `casos_srt`. Triggers: "procesar chat firmó archivo",
-  "backfill firmados desde txt", "recuperar firmados perdidos".
-version: 1.0.0
+  y detecta qué firmados están cargados en el sistema y cuáles se perdieron.
+  Cruza contra `casos_srt` Y `expedientes` (porque muchos clientes pasaron
+  directo a juicio sin caso SRT). Solo procesa desde una fecha de corte
+  (default 2026-01-01) — fechas anteriores ya están consolidadas por otro
+  flujo. **MODO READ-ONLY**: solo reporta, nunca crea casos (riesgo alto
+  de duplicación con expedientes existentes). Triggers: "procesar chat
+  firmó archivo", "backfill firmados desde txt", "recuperar firmados
+  perdidos", "qué firmados se colgaron".
+version: 2.0.0
 ---
 
-# Backfill Firmados desde Archivo
+# Backfill Firmados desde Archivo (READ-ONLY)
 
 ## OBJETIVO
 
 Procesar un export de WhatsApp del grupo "FIRMÓ 🖋️📈" para encontrar
-clientes que firmaron pero **nunca se cargaron** en `casos_srt`. Los compara
-contra la base por nombre normalizado y teléfono, y reporta:
+clientes que firmaron pero **nunca se cargaron** en el sistema. Cruza
+contra `casos_srt` Y `expedientes` (cliente puede haber pasado directo
+a juicio sin caso SRT intermedio).
 
-- ✅ **Encontrados**: firmados del chat que ya están en la base.
-- ❌ **Faltantes**: firmados del chat que NO están en la base (estos son los
-  que potencialmente perdimos).
-- 🤔 **Ambiguos**: nombre coincide con varios casos (revisar manual).
+**Resultado**: clasifica cada firmado en 4 categorías y genera un reporte.
+**NO crea nada** — el usuario decide qué hacer con los faltantes uno por
+uno, porque hay alto riesgo de duplicar expedientes ya armados.
+
+## CATEGORÍAS DEL REPORTE
+
+| Categoría | Significado |
+|---|---|
+| ✅ **En casos_srt** | El cliente aparece en `casos_srt` activo (o archivado). Caso registrado. |
+| 📁 **En expedientes** | El cliente NO está en `casos_srt` pero SÍ en `expedientes` — pasó directo a juicio. No es "perdido". |
+| ⚠️ **Colgados** | El firmado NO está en ninguna tabla. Estos son los realmente perdidos. |
+| 🤔 **Ambiguos** | Nombre matchea con varios candidatos — revisar manual. |
+
+> Los de la categoría ⚠️ son los candidatos para recuperar. El usuario los
+> revisa uno por uno (algunos pueden ser falsos positivos: cliente que no
+> dió curso, abandono, error de carga, etc.) y decide caso por caso si
+> crear el caso/expediente. **El skill no crea nada automáticamente**.
 
 ## DATOS DE REFERENCIA
 
@@ -183,7 +200,7 @@ CREATE TEMP TABLE IF NOT EXISTS _firmados_archivo (
 -- cargado en /tmp/firmados-parsed.json)
 ```
 
-### Paso 4 — Cruzar con casos_srt
+### Paso 4 — Cruzar contra casos_srt + expedientes
 
 ```sql
 WITH parsed AS (
@@ -198,66 +215,103 @@ casos AS (
     regexp_replace(coalesce(telefono, ''), '[^0-9]', '', 'g') AS tel_norm
   FROM casos_srt
 ),
-matches AS (
-  SELECT p.*, c.id AS caso_id, c.activo, c.etapa,
+exps AS (
+  SELECT id, caratula AS nombre, caratula_actor_norm AS nn, estado
+  FROM expedientes
+  WHERE caratula_actor_norm IS NOT NULL
+),
+-- Match contra casos_srt (telefono o nombre)
+match_casos AS (
+  SELECT DISTINCT ON (p.linea_chat) p.linea_chat, p.nombre_raw, p.telefono, p.fecha,
+    c.id AS caso_id, c.activo AS caso_activo, c.etapa,
     CASE
       WHEN p.tel_norm <> '' AND p.tel_norm = c.tel_norm THEN 'telefono'
-      WHEN p.nn IS NOT NULL AND p.nn = c.nn THEN 'nombre_exacto'
-      WHEN p.nn IS NOT NULL AND length(p.nn) >= 10
-        AND (c.nn ILIKE '%' || split_part(p.nn, ' ', 1) || '%'
-             AND c.nn ILIKE '%' || split_part(p.nn, ' ', 2) || '%') THEN 'nombre_fuzzy'
-      ELSE NULL
-    END AS tipo_match
-  FROM parsed p
-  LEFT JOIN casos c ON
-    (p.tel_norm <> '' AND p.tel_norm = c.tel_norm)
-    OR (p.nn IS NOT NULL AND p.nn = c.nn)
-    OR (p.nn IS NOT NULL AND length(p.nn) >= 10
+      WHEN p.nn = c.nn THEN 'nombre_exacto'
+      WHEN length(p.nn) >= 10
         AND c.nn ILIKE '%' || split_part(p.nn, ' ', 1) || '%'
+        AND c.nn ILIKE '%' || split_part(p.nn, ' ', 2) || '%' THEN 'nombre_fuzzy'
+    END AS tipo
+  FROM parsed p
+  JOIN casos c ON
+    (p.tel_norm <> '' AND p.tel_norm = c.tel_norm)
+    OR p.nn = c.nn
+    OR (length(p.nn) >= 10 AND c.nn ILIKE '%' || split_part(p.nn, ' ', 1) || '%'
         AND c.nn ILIKE '%' || split_part(p.nn, ' ', 2) || '%')
+  ORDER BY p.linea_chat,
+    CASE
+      WHEN p.tel_norm <> '' AND p.tel_norm = c.tel_norm THEN 1
+      WHEN p.nn = c.nn THEN 2 ELSE 3 END
 ),
-encontrados AS (
-  SELECT DISTINCT ON (linea_chat) linea_chat, nombre_raw, telefono, fecha, caso_id, tipo_match
-  FROM matches WHERE tipo_match IS NOT NULL
-  ORDER BY linea_chat, CASE tipo_match
-    WHEN 'telefono' THEN 1 WHEN 'nombre_exacto' THEN 2 WHEN 'nombre_fuzzy' THEN 3 END
+-- Match contra expedientes (solo nombre, no tienen teléfono usable)
+match_exps AS (
+  SELECT DISTINCT ON (p.linea_chat) p.linea_chat, p.nombre_raw, p.telefono, p.fecha,
+    e.id AS exp_id, e.estado,
+    CASE
+      WHEN p.nn = e.nn THEN 'nombre_exacto'
+      WHEN length(p.nn) >= 10
+        AND e.nn ILIKE '%' || split_part(p.nn, ' ', 1) || '%'
+        AND e.nn ILIKE '%' || split_part(p.nn, ' ', 2) || '%' THEN 'nombre_fuzzy'
+    END AS tipo
+  FROM parsed p
+  JOIN exps e ON
+    p.nn = e.nn
+    OR (length(p.nn) >= 10 AND e.nn ILIKE '%' || split_part(p.nn, ' ', 1) || '%'
+        AND e.nn ILIKE '%' || split_part(p.nn, ' ', 2) || '%')
+  WHERE p.linea_chat NOT IN (SELECT linea_chat FROM match_casos)
+  ORDER BY p.linea_chat, CASE WHEN p.nn = e.nn THEN 1 ELSE 2 END
 ),
-faltantes AS (
-  SELECT linea_chat, nombre_raw, telefono, fecha, alta, fecha_accidente, contenido
+colgados AS (
+  SELECT linea_chat, nombre_raw, telefono, fecha, alta, fecha_accidente, autor, contenido
   FROM parsed
-  WHERE linea_chat NOT IN (SELECT linea_chat FROM encontrados)
+  WHERE linea_chat NOT IN (SELECT linea_chat FROM match_casos)
+    AND linea_chat NOT IN (SELECT linea_chat FROM match_exps)
 )
 SELECT
-  (SELECT COUNT(*) FROM parsed) AS total_chat,
-  (SELECT COUNT(*) FROM encontrados) AS encontrados,
-  (SELECT COUNT(*) FROM faltantes) AS faltantes;
+  (SELECT COUNT(*) FROM parsed) AS total_chat_desde_corte,
+  (SELECT COUNT(*) FROM match_casos) AS en_casos_srt,
+  (SELECT COUNT(*) FROM match_exps) AS en_expedientes,
+  (SELECT COUNT(*) FROM colgados) AS colgados;
 ```
 
-### Paso 5 — Reporte
-
-Generar dos secciones:
-
-**A. Resumen ejecutivo**: total, encontrados, faltantes, ambiguos.
-
-**B. Lista de faltantes** (los que efectivamente se perdieron):
+### Paso 5 — Lista detallada de colgados
 
 ```sql
-SELECT fecha, nombre_raw, telefono, alta, contenido
-FROM faltantes
+SELECT fecha, nombre_raw, telefono, alta, autor, LEFT(contenido, 150) AS preview
+FROM colgados
 ORDER BY fecha;
 ```
 
-Mostrar todos. Si son >50, mostrar los 50 más recientes + total.
+Mostrar TODOS los colgados (sin truncar). Esos son los candidatos a
+revisar manualmente.
 
-### Paso 6 — Opcional: crear los faltantes
+### Paso 6 — Guardar reporte JSON en disco
 
-Si Matías confirma, INSERT en `casos_srt` con `origen = 'BACKFILL_CHAT_TXT'`,
-`auto_creado = true`, etapa según `alta` (TRUE → POR_INICIAR, FALSE/NULL →
-TRATAMIENTO), `firmado_por = autor del mensaje`, `fecha_firma = fecha del
-mensaje`.
+```bash
+cat > /tmp/firmados-backfill-report.json <<EOF
+{
+  "fecha_corte": "...",
+  "total_chat_desde_corte": ...,
+  "en_casos_srt": [...],
+  "en_expedientes": [...],
+  "colgados": [...]
+}
+EOF
+```
 
-NO ejecutar este paso sin confirmación humana — el dataset puede tener
-errores de parsing.
+## ⚠️ MODO READ-ONLY — NO CREAR NADA AUTOMÁTICAMENTE
+
+**El skill no debe insertar casos ni expedientes**. Los "colgados" pueden
+ser:
+- Clientes que abandonaron antes de iniciar.
+- Errores de parsing (nombre raro, formato no estándar).
+- Falsos positivos por matching laxo en las otras categorías.
+- Casos que efectivamente se perdieron y hay que recuperar.
+
+El usuario revisa cada colgado y decide manualmente desde el front si
+crear el caso o no. Si el porcentaje de colgados es bajo (<10%), puede
+ser práctico crearlos uno por uno desde el formulario "Nuevo Caso" del
+sistema. Si es alto (>30%), conviene revisar antes si hay un bug en el
+parser o si el matching está fallando.
 
 ## REGLAS
 
@@ -268,9 +322,13 @@ errores de parsing.
   "Apellido Nombre" antes de comparar.
 - Detección de alta usa heurística simple — si dice "Con alta" → TRUE,
   si dice "En tratamiento" o "Sin alta" → FALSE, si no menciona nada →
-  NULL (queda en TRATAMIENTO por default).
+  NULL.
+- **NO crear casos ni expedientes automáticamente** — solo reportar.
+- Cruzar contra AMBAS tablas (`casos_srt` Y `expedientes`) porque muchos
+  clientes pasaron directo a juicio sin caso SRT.
 
 ## OUTPUT FINAL
 
 Reporte ejecutivo en stdout + archivo `/tmp/firmados-backfill-report.json`
-con lista completa. Si Matías confirma, ejecutar Paso 6.
+con las 4 categorías. **No ejecutar ningún INSERT** — el usuario revisa
+los colgados manualmente y decide caso por caso.
