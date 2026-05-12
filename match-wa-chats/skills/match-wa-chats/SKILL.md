@@ -10,7 +10,7 @@ description: >
   Idempotente: sólo procesa filas con `wa_chat_id IS NULL`. Reporta por
   WhatsApp al grupo "WA Claude SRT". Triggers: "match wa chats", "matchear
   whatsapp", "corrida wa_chat_id".
-version: 2.1.0
+version: 2.2.0
 ---
 
 # Match wa_chat_id en casos_srt + expedientes
@@ -99,6 +99,7 @@ m AS (
   FROM cn c
   JOIN gn g ON ((c.t1 = g.t1 AND c.t2 = g.t2) OR (c.t1 = g.t2 AND c.t2 = g.t1))
   WHERE length(c.t1) >= 3 AND length(c.t2) >= 3
+    AND g.chat_id NOT IN (SELECT chat_id FROM wa_chats_excluidos)
     AND (c.t3 = '' OR g.t3 = '' OR c.t3 = g.t3)
 ),
 matches_unicos AS (
@@ -147,6 +148,7 @@ m AS (
   FROM en e
   JOIN gn g ON ((e.t1 = g.t1 AND e.t2 = g.t2) OR (e.t1 = g.t2 AND e.t2 = g.t1))
   WHERE length(e.t1) >= 3 AND length(e.t2) >= 3
+    AND g.chat_id NOT IN (SELECT chat_id FROM wa_chats_excluidos)
     AND (e.t3 = '' OR g.t3 = '' OR e.t3 = g.t3)
 ),
 matches_unicos AS (
