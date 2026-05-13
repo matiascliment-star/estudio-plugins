@@ -101,11 +101,24 @@ con el nombre. NO crear nada nuevo.
 
 ### Paso 4 — Crear el caso
 
+⚠️ **REGLA DURA**: `clasificacion_pre_srt` se setea SIEMPRE a `'PENDIENTE_CONTACTO'`
+cuando `etapa = 'POR_INICIAR'`. Motivo: independientemente de si el cliente
+firmó con alta médica o sin secuelas, siempre hay que llamarlo para tomarle
+los datos del relato antes de iniciar el SRT. El skill NO debe inferir otras
+clasificaciones (LISTA_SIN_SECUELAS, CON_PROBLEMAS, RECHAZO_PARA_INICIAR, etc.)
+desde el mensaje de firmados — esas decisiones las toman las chicas después
+de la llamada y se ajustan a mano en la solapa Pre-SRT.
+
+Para `etapa = 'TRATAMIENTO'` dejar `clasificacion_pre_srt = NULL` (el seguimiento
+LLM lo va a promover a POR_INICIAR + PENDIENTE_CONTACTO cuando detecte alta).
+
 ```sql
 INSERT INTO casos_srt (
   nombre, art_demandada, etapa, estado, fecha_accidente,
   telefono, fecha_firma, firmado_por,
-  lesion, notas, origen, activo, auto_creado, created_at, updated_at
+  lesion, notas, origen, activo, auto_creado,
+  clasificacion_pre_srt,
+  created_at, updated_at
 )
 VALUES (
   $1, $2, $3, 'INICIADO', $4,
@@ -115,6 +128,7 @@ VALUES (
   'FIRMÓ_GRUPO_WA',
   true,
   true,
+  CASE WHEN $3 = 'POR_INICIAR' THEN 'PENDIENTE_CONTACTO' ELSE NULL END,
   NOW(),
   NOW()
 )
@@ -186,3 +200,4 @@ nuevos, `request_id` de pg_net.
 - `art_demandada` se guarda en UPPER y sin punto final, para que matchee bien.
 - Si el caso queda con `fecha_accidente=NULL`, dejar nota en `observaciones` para que las chicas la completen.
 - Solo casos con `etapa IN ('TRATAMIENTO', 'POR_INICIAR')` (la solapa Pre-SRT del front filtra por esa etapa).
+- `clasificacion_pre_srt`: SIEMPRE `'PENDIENTE_CONTACTO'` para POR_INICIAR, NULL para TRATAMIENTO. Nunca inferir otras clasificaciones desde el mensaje — las chicas las ajustan a mano después de la llamada.
