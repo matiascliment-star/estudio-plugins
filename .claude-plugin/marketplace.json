@@ -1,6 +1,6 @@
 {
   "name": "estudio-plugins",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Plugins del Estudio García Climent para Cowork",
   "owner": {
     "name": "Estudio García Climent"
@@ -109,6 +109,13 @@
       "version": "1.1.0",
       "source": "./control-liquidacion",
       "description": "Control diario de ejecución de sentencia (estados 70–76) en dos corridas L-V: URGENCIA a las 18:00 AR (3 por sub-estado × días sin empuje → 21 CABA + top Pcia) y MONTO a las 18:30 AR (top 20 por plata pendiente DESC). Analiza con subagentes, genera borradores DOCX, sube a OneDrive/MEV y manda WhatsApp por responsable (Matías/Noe). Inserta en liquidacion_corridas con tipo_corrida='urgencia' o 'monto'.",
+      "author": { "name": "Matias Climent" }
+    },
+    {
+      "name": "control-giros",
+      "version": "1.0.0",
+      "source": "./control-giros",
+      "description": "Control diario de facturación mensual de honorarios (tope 50M netos): lee giros nuevos del grupo WhatsApp '💰💷💸 giros/transferencias 💰💷💸' (instancia personal de Mati) y proveídos MEV/PJN, clasifica honorarios vs capital, upserta en giros_honorarios / giros_capital con dedup_key y reporta semáforo del mes en curso al WhatsApp personal. Privado: RLS-locked solo al UID de Mati.",
       "author": { "name": "Matias Climent" }
     }
   ]

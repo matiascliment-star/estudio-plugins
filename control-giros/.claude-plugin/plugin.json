@@ -1,0 +1,9 @@
+{
+  "name": "control-giros",
+  "version": "1.0.0",
+  "description": "Control diario de facturación: lee giros nuevos del grupo WhatsApp y proveídos MEV/PJN, clasifica honorarios vs capital, upserta en Supabase y reporta semáforo del tope 50M netos. Privado, RLS-locked solo a Mati.",
+  "author": {
+    "name": "Matias Climent"
+  },
+  "keywords": ["giros", "honorarios", "facturacion", "transferencias", "supabase", "whatsapp"]
+}
