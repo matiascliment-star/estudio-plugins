@@ -29,8 +29,8 @@ Objetivo: que Mati pueda **decidir cada día qué giros pedir y cuáles retener*
 - **Vista**: `giros_honorarios_resumen_mensual` con `facturable_neto = hon_neto + intereses_hon`
 - **Tope mensual**: 50.000.000 ARS de honorarios netos (sin IVA, sin reintegro IVA, sin capital)
 - **Instancia WA personal**: `inst_29a52ca6` (NO confundir con la del estudio)
-- **Grupo**: "💰💷💸 giros/transferencias 💰💷💸"
-- **Receptor del resumen**: Mati via su WA personal (instancia personal)
+- **Grupo fuente** (de donde leemos los giros que pasa Noe): "💰💷💸 giros/transferencias 💰💷💸"
+- **Grupo destino del resumen**: "Mati y Noe" — JID `120363026685801986@g.us` (instancia personal). Acá llega el resumen diario; lo ven Mati + Noe juntos.
 
 ## Workflow
 
@@ -151,9 +151,14 @@ Semáforo del **mes en curso**:
 - 🟡 70–95% ($35M–$47,5M)
 - 🔴 ≥ 95% ($47,5M+) o ya pasado
 
-### Paso 7 — Reporte WhatsApp a Mati personal
+### Paso 7 — Reporte WhatsApp al grupo "Mati y Noe"
 
-Mandar al **número personal de Mati** (no al estudio) usando `instanceId=inst_29a52ca6`. Si no sabés el JID/número, mandar al chat personal "Yo" (notes-to-self) de esa misma instancia.
+Mandar **únicamente** al grupo "Mati y Noe" (JID `120363026685801986@g.us`) usando `instanceId=inst_29a52ca6`. Acá lo leen Mati y Noe juntos.
+
+**NO mandar nunca**:
+- Al individual de Noe (`5491170166033@s.whatsapp.net`) — solo al grupo.
+- A la instancia del estudio — ese WhatsApp lo ven todas las empleadas y el contenido es privado.
+- Al grupo TRABAJO del estudio (excepto en caso de error caído, sin montos).
 
 Formato:
 
