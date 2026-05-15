@@ -115,44 +115,46 @@ WHERE created_at > '<last_mov>'
 
 Procesar igual que pasada A. `fuente='proveido_mev'`/`'proveido_pjn'`, `movimiento_id`=id del mov.
 
-### Paso 4 — Pasada C: mails Banco Ciudad (Hotmail)
+### Paso 4 — Pasada C: mails Banco Ciudad (Hotmail) — vía Edge Function
 
-**IMPORTANTE**: El sandbox del cron de claude.ai bloquea `curl` outbound a hosts externos como `graph.microsoft.com` y `login.microsoftonline.com`. **Usar la tool `WebFetch` en lugar de Bash+curl** — tiene whitelist más permisiva para APIs externas. Si WebFetch también falla, reportar el bloqueo a TRABAJO (sin montos) y continuar con las otras pasadas.
+**IMPORTANTE**: El sandbox del cron bloquea outbound a `graph.microsoft.com` (tanto `curl` como `WebFetch`). Por eso hay una **Edge Function de Supabase** llamada `bank-mail-fetch` que hace de proxy: refresca el OAuth token, llama Graph y devuelve los mails crudos.
 
-**4a. Refresh access_token si vencido**
+**4a. Llamar a la Edge Function**
 
-```sql
-SELECT account_email, client_id, refresh_token, access_token, expires_at
-FROM microsoft_oauth_mati
-WHERE account_email='flirteador@hotmail.com';
+Usar `Bash` con `curl` (Supabase sí está en whitelist):
+
+```bash
+ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkZ2RiYmN3Y3JpcnBuZmRteWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4MDMyMTgsImV4cCI6MjA4MDM3OTIxOH0.Rb4MVTyGIjcr5AbSdqEb0rZdGTJF5X_jNzJDol-KY3g"
+SINCE="<ISO 8601 de last_banco, ej. 2026-05-13T00:00:00Z>"
+curl -sS "https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/bank-mail-fetch?since=${SINCE}&top=20" \
+  -H "Authorization: Bearer ${ANON_KEY}" \
+  -H "apikey: ${ANON_KEY}"
 ```
 
-Si `expires_at < NOW() + INTERVAL '2 min'`, refrescar con **WebFetch**:
+Devuelve JSON:
+```json
+{
+  "since": "...",
+  "total_listed": 5,
+  "returned": 2,
+  "mails": [
+    { "id": "...", "subject": "Aviso - Últimos movimientos", "receivedDateTime": "...", "body": "<texto plano>" }
+  ]
+}
+```
 
-- URL: `https://login.microsoftonline.com/common/oauth2/v2.0/token`
-- Method: POST
-- Headers: `Content-Type: application/x-www-form-urlencoded`
-- Body (form-urlencoded):
-  - `client_id=0cb7d80d-72b7-41a8-b71e-c8fc68d9a986`
-  - `grant_type=refresh_token`
-  - `refresh_token=<el de la DB>`
-  - `scope=https://graph.microsoft.com/Mail.Read offline_access User.Read`
+Si la Edge Function falla (status != 200), reportar a TRABAJO sin montos: "control giros: bank-mail-fetch caído, revisar" y continuar.
 
-Update DB con nuevo `access_token`, `refresh_token` (Microsoft rota) y `expires_at = NOW() + (expires_in segundos)`.
+**4b. Parsear cada `body` (vos, el LLM)**
 
-**4b. Listar mails nuevos del banco**
+Para cada mail, identificar las líneas con formato:
+```
+DD/MM   DETALLE   $ X.XXX,XX [arriba|abajo]
+```
+- `[arriba]` = crédito (entró plata)
+- `[abajo]` = débito (salió plata)
 
-Usar **WebFetch** con:
-- URL: `https://graph.microsoft.com/v1.0/me/messages?$search="Aviso - Últimos movimientos"&$top=20&$select=id,subject,receivedDateTime`
-- Headers: `Authorization: Bearer <access_token>`
-
-Filtrar respuesta por `receivedDateTime > last_banco`.
-
-**4c. Leer body de cada mail nuevo**
-
-Usar **WebFetch**:
-- URL: `https://graph.microsoft.com/v1.0/me/messages/<id>`
-- Headers: `Authorization: Bearer <access_token>`, `Prefer: outlook.body-content-type="text"`
+Extraer `fecha` (DD/MM → YYYY-MM-DD usando año del mail), `detalle`, `importe` (float), `signo`.
 
 El body viene en texto plano. Formato típico:
 ```
@@ -172,13 +174,15 @@ Para cada línea con formato `DD/MM   DETALLE   $ MONTO [arriba|abajo]`, extraer
 - `importe` = monto numérico (sacar puntos miles, coma decimal).
 - `signo` = `credito` si `[arriba]`, `debito` si `[abajo]`.
 
-**4e. Upsert en `movimientos_banco`**
+**4c. Upsert en `movimientos_banco`**
+
+El UNIQUE es `(banco, fecha, importe, detalle)` — un mismo movimiento aparece en múltiples mails consecutivos pero solo se inserta una vez.
 
 ```sql
 INSERT INTO movimientos_banco
   (banco, fecha, detalle, importe, signo, cuenta, email_message_id, email_fecha)
 VALUES ('ciudad', ..., ..., ..., ..., ..., '<msg_id>', '<receivedDateTime>')
-ON CONFLICT (email_message_id, fecha, importe, detalle) DO NOTHING;
+ON CONFLICT (banco, fecha, importe, detalle) DO NOTHING;
 ```
 
 ### Paso 5 — Reglas de clasificación de giros (texto/proveído)
