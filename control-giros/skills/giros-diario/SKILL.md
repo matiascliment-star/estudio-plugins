@@ -143,18 +143,9 @@ Devuelve JSON:
 }
 ```
 
-Si la Edge Function falla (status != 200), reportar a TRABAJO sin montos: "control giros: bank-mail-fetch caído, revisar" y continuar.
+Si la Edge Function falla (status != 200): **NO** mandar nada a TRABAJO. Registrar el error en `giros_runs.errores` y continuar con las otras pasadas. En el resumen final a "Mati y Noe" agregar línea "⚠️ Pasada C falló, revisar app".
 
 **4b. Parsear cada `body` (vos, el LLM)**
-
-Para cada mail, identificar las líneas con formato:
-```
-DD/MM   DETALLE   $ X.XXX,XX [arriba|abajo]
-```
-- `[arriba]` = crédito (entró plata)
-- `[abajo]` = débito (salió plata)
-
-Extraer `fecha` (DD/MM → YYYY-MM-DD usando año del mail), `detalle`, `importe` (float), `signo`.
 
 El body viene en texto plano. Formato típico:
 ```
@@ -164,14 +155,10 @@ FECHA   DETALLE                                  IMPORTE
 13/05   COMPRA PEDIDOSYA*PROPINA - CABA $ 750,00 [abajo]
 ```
 
-`[arriba]` = crédito (entró plata), `[abajo]` = débito.
-
-**4d. Parsear líneas (vos, el LLM)**
-
 Para cada línea con formato `DD/MM   DETALLE   $ MONTO [arriba|abajo]`, extraer:
-- `fecha` = DD/MM convertido a YYYY-MM-DD usando el año del mail.
+- `fecha` = DD/MM convertido a YYYY-MM-DD usando el año del mail (`receivedDateTime`).
 - `detalle` = el texto del medio (trim).
-- `importe` = monto numérico (sacar puntos miles, coma decimal).
+- `importe` = monto numérico (sacar puntos miles, coma decimal). Ej. `13.119.626,82` → `13119626.82`.
 - `signo` = `credito` si `[arriba]`, `debito` si `[abajo]`.
 
 **4c. Upsert en `movimientos_banco`**
@@ -280,12 +267,15 @@ Semáforo del **mes en curso** sobre `confirmado` (lo que ya entró):
 
 ### Paso 9 — Reporte WhatsApp al grupo "Mati y Noe"
 
-Mandar **solo** al grupo "Mati y Noe" (JID `120363026685801986@g.us`) usando `instanceId=inst_29a52ca6`.
+Mandar **siempre y únicamente** al grupo "Mati y Noe" (JID `120363026685801986@g.us`) usando `instanceId=inst_29a52ca6`.
 
-**NO mandar**:
-- Al individual de Noe.
-- A la instancia del estudio (la ven las empleadas).
-- Al grupo TRABAJO (salvo error caído, sin montos).
+**REGLAS DURAS — NO HAY EXCEPCIONES**:
+- ❌ NUNCA mandar al individual de Noe (`5491170166033@s.whatsapp.net`).
+- ❌ NUNCA mandar al grupo TRABAJO del estudio bajo NINGUNA circunstancia (ni siquiera para reportar errores). Las empleadas leen TRABAJO y no deben saber que existe el sistema de giros.
+- ❌ NUNCA mandar desde la instancia del estudio.
+- ✅ TODO va al grupo "Mati y Noe" desde `inst_29a52ca6`, incluyendo errores y fallos parciales.
+
+Si la corrida falla entera (no se puede mandar a "Mati y Noe" por sesión WA caída), NO usar TRABAJO como fallback — solo registrar en `giros_runs.errores` y terminar silencioso. Mati va a ver el run faltante en la app.
 
 Formato:
 
@@ -322,8 +312,8 @@ Formato:
 ## Notas operativas
 
 - **NUNCA** usar la instancia del estudio para leer el grupo de giros.
-- **NUNCA** mandar mensajes operativos desde la instancia personal — solo el resumen al grupo "Mati y Noe".
-- Si `wa_get_messages` falla, reportar al grupo TRABAJO sin montos: "control giros caído, revisar".
-- Si Microsoft Graph devuelve 401 incluso tras refresh: el refresh_token caducó (Mati tiene que reconectar Hotmail en la giros-app). Reportar a TRABAJO sin detalles.
+- **NUNCA** mandar mensajes desde la instancia personal a ningún chat que no sea "Mati y Noe" JID `120363026685801986@g.us`.
+- **NUNCA** mandar al grupo TRABAJO bajo ninguna circunstancia. Si todo falla, registrar en `giros_runs.errores` y terminar silencioso.
+- Si Microsoft Graph devuelve 401 incluso tras refresh: el refresh_token caducó. Registrar en `giros_runs.errores`, en el resumen a "Mati y Noe" agregar "⚠️ Reconectar Hotmail en la app". NO ir a TRABAJO.
 - **Back-fill** manual del chat exportado: usar `extract_from_chat_txt.py <path.txt>` para emitir candidatos JSON, después procesar como Pasada A (backfill inicial se hizo 2026-05-13 con 199 filas).
 - El **modelo de consentimiento** está implementado a partir de 2026-05-15: `fecha_orden` (cuando ordenan), `fecha_proyectada_cobro` (calculada), `fecha_girado` (cuando entra). `mes_imputacion` se basa en `fecha_girado` si está, sino en `fecha_proyectada_cobro`. Los 199 históricos fueron re-imputados.
