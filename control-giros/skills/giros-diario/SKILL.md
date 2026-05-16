@@ -115,35 +115,44 @@ WHERE created_at > '<last_mov>'
 
 Procesar igual que pasada A. `fuente='proveido_mev'`/`'proveido_pjn'`, `movimiento_id`=id del mov.
 
-### Paso 4 — Pasada C: mails Banco Ciudad (Hotmail) — vía Edge Function
+### Paso 4 — Pasada C: mails Banco Ciudad (Hotmail) — vía pg_net + Edge Function
 
-**IMPORTANTE**: El sandbox del cron bloquea outbound a `graph.microsoft.com` (tanto `curl` como `WebFetch`). Por eso hay una **Edge Function de Supabase** llamada `bank-mail-fetch` que hace de proxy: refresca el OAuth token, llama Graph y devuelve los mails crudos.
+**IMPORTANTE**: El sandbox del cron bloquea outbound a hosts externos (`graph.microsoft.com`, `*.supabase.co/functions`, etc) tanto desde `curl` como desde `WebFetch`. La salida es ir **por Postgres**: hay funciones SQL que el LLM llama via MCP `execute_sql` (que sí funciona), que internamente usan `pg_net` para invocar la Edge Function `bank-mail-fetch`, y devuelven el JSON con los mails crudos. El LLM parsea los bodies como siempre.
 
-**4a. Llamar a la Edge Function**
+**4a. Disparar request a la Edge Function**
 
-Usar `Bash` con `curl` (Supabase sí está en whitelist):
-
-```bash
-ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkZ2RiYmN3Y3JpcnBuZmRteWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4MDMyMTgsImV4cCI6MjA4MDM3OTIxOH0.Rb4MVTyGIjcr5AbSdqEb0rZdGTJF5X_jNzJDol-KY3g"
-SINCE="<ISO 8601 de last_banco, ej. 2026-05-13T00:00:00Z>"
-curl -sS "https://wdgdbbcwcrirpnfdmykh.supabase.co/functions/v1/bank-mail-fetch?since=${SINCE}&top=20" \
-  -H "Authorization: Bearer ${ANON_KEY}" \
-  -H "apikey: ${ANON_KEY}"
+```sql
+SELECT bank_mails_request('<ISO8601 desde, ej 2026-05-13T00:00:00Z>', 20);
 ```
 
-Devuelve JSON:
+Devuelve `request_id` (bigint). Guardalo.
+
+**4b. Esperar 3 segundos** (con `Bash` `sleep 3`). pg_net trabaja async y necesita el delay para que la respuesta esté disponible.
+
+**4c. Recuperar la respuesta**
+
+```sql
+SELECT bank_mails_response(<request_id>);
+```
+
+Devuelve jsonb:
 ```json
 {
-  "since": "...",
-  "total_listed": 5,
-  "returned": 2,
-  "mails": [
-    { "id": "...", "subject": "Aviso - Últimos movimientos", "receivedDateTime": "...", "body": "<texto plano>" }
-  ]
+  "status": "ok",
+  "data": {
+    "since": "...",
+    "total_listed": 5,
+    "returned": 2,
+    "mails": [
+      { "id": "...", "subject": "Aviso - Últimos movimientos", "receivedDateTime": "...", "body": "<texto plano>" }
+    ]
+  }
 }
 ```
 
-Si la Edge Function falla (status != 200): **NO** mandar nada a TRABAJO. Registrar el error en `giros_runs.errores` y continuar con las otras pasadas. En el resumen final a "Mati y Noe" agregar línea "⚠️ Pasada C falló, revisar app".
+Si `status='pending'` (todavía no llegó): esperar 2-3 segundos más y reintentar `bank_mails_response`. Hasta 3 reintentos. Si después de 15 segundos sigue pending, considerar como error.
+
+Si `status='error'`: registrar en `giros_runs.errores`, en el resumen agregar "⚠️ Pasada C falló (banco)" y continuar con las demás pasadas. **NO mandar nada a TRABAJO**.
 
 **4b. Parsear cada `body` (vos, el LLM)**
 
