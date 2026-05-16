@@ -229,18 +229,20 @@ Para cada candidato de Paso 2 o 3, decidir destino + despejar números:
 
 ### Paso 6 — Vincular `expediente_id` (best-effort)
 
-```sql
-UPDATE giros_honorarios gh
-SET expediente_id = e.id
-FROM expedientes e
-WHERE gh.expediente_id IS NULL AND gh.expediente_numero IS NOT NULL
-  AND (REPLACE(e.numero, '/', '') = REPLACE(gh.expediente_numero, '/', '')
-       OR e.numero = gh.expediente_numero);
+**Importante**: `expedientes.numero` tiene **padding de ceros** (`CNT 026777/2024`) pero `giros.expediente_numero` típicamente no (`CNT 26777/2024`). Hay que normalizar quitando prefijo no numérico y ceros leading antes de comparar.
 
-UPDATE giros_capital gc SET expediente_id = e.id FROM expedientes e
-WHERE gc.expediente_id IS NULL AND gc.expediente_numero IS NOT NULL
-  AND (REPLACE(e.numero, '/', '') = REPLACE(gc.expediente_numero, '/', '')
-       OR e.numero = gc.expediente_numero);
+```sql
+WITH normalized AS (
+  SELECT gh.id AS giro_id, e.id AS exp_id
+  FROM giros_honorarios gh
+  CROSS JOIN expedientes e
+  WHERE gh.expediente_id IS NULL AND gh.expediente_numero IS NOT NULL
+    AND regexp_replace(gh.expediente_numero, '^[^0-9]*0*', '') = regexp_replace(e.numero, '^[^0-9]*0*', '')
+)
+UPDATE giros_honorarios gh SET expediente_id = n.exp_id
+FROM normalized n WHERE gh.id = n.giro_id;
+
+-- Idem giros_capital (mismo patrón, cambiando tabla).
 ```
 
 Si queda sin matchear, no es bloqueante.
