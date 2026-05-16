@@ -247,6 +247,25 @@ Si queda sin matchear, no es bloqueante.
 
 ### Paso 7 — Match banco ↔ giros (autoset `fecha_girado`)
 
+**7a. Marcar como `ignorado` el ruido**
+
+Antes del match, marcar como `match_estado='ignorado'` todos los movimientos que NO son giros judiciales (débitos, compras, transferencias propias, devoluciones). Así no aparecen en el contador de pendientes.
+
+```sql
+UPDATE movimientos_banco
+SET match_estado = 'ignorado',
+    notas = COALESCE(notas, '') || ' [auto-ignorado: ruido no judicial]'
+WHERE match_estado = 'sin_match'
+  AND (
+    signo = 'debito'
+    OR (signo = 'credito'
+        AND detalle NOT ILIKE '%DEP JUDI%'
+        AND detalle NOT ILIKE '%DEPOSITO JUDICIAL%')
+  );
+```
+
+**7b. Match contra giros pendientes**
+
 **Importante**: este paso procesa **TODOS** los `movimientos_banco` con `match_estado='sin_match'`, no solo los nuevos. Esto permite que cuando se carga un giro retroactivo (por back-fill o por carga manual), el match se haga automáticamente sin intervención.
 
 Para cada `movimientos_banco` con `signo='credito'`, `match_estado='sin_match'`, detalle LIKE `%DEP JUDI%` o `%DEPOSITO JUDICIAL%`:
