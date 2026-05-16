@@ -264,37 +264,52 @@ WHERE match_estado = 'sin_match'
   );
 ```
 
-**7b. Match contra giros pendientes**
+**7b. Match contra giros pendientes — tolerancia escalonada**
 
 **Importante**: este paso procesa **TODOS** los `movimientos_banco` con `match_estado='sin_match'`, no solo los nuevos. Esto permite que cuando se carga un giro retroactivo (por back-fill o por carga manual), el match se haga automáticamente sin intervención.
+
+**Realidad operativa**: el banco a veces erra el monto hasta **$100.000** (errores de retención mal calculada, diferencias UMA, intereses no contabilizados). Por eso usamos tolerancia escalonada:
+
+| Tolerancia (|diff|) | Tratamiento |
+|---|---|
+| ≤ $5 | **Match seguro** automático |
+| $5 – $100.000 | **Match dudoso**: solo aplicar si hay UN único giro pendiente en esa ventana. Si hay 2+, marcar `match_multiple`. |
+| > $100.000 | NO matchear automático. Marcar `sin_match`. |
 
 Para cada `movimientos_banco` con `signo='credito'`, `match_estado='sin_match'`, detalle LIKE `%DEP JUDI%` o `%DEPOSITO JUDICIAL%`:
 
 ```sql
-SELECT id, expediente_numero, monto_total, monto_honorarios_neto, neto_esperado_caba
+-- Primero buscar matches exactos (≤ $5)
+SELECT id, neto_esperado_caba, ABS(neto_esperado_caba - <importe>) AS diff
 FROM giros_honorarios_match
-WHERE estado='pendiente'
-  AND jurisdiccion='caba'
-  AND ABS(neto_esperado_caba - <importe_banco>) <= 5
-  AND fecha_proyectada_cobro BETWEEN <fecha_banco> - INTERVAL '15 days' AND <fecha_banco> + INTERVAL '15 days';
+WHERE estado='pendiente' AND jurisdiccion='caba'
+  AND ABS(neto_esperado_caba - <importe>) <= 5;
+
+-- Si no hay matches exactos, ampliar a tolerancia $100k
+SELECT id, neto_esperado_caba, ABS(neto_esperado_caba - <importe>) AS diff
+FROM giros_honorarios_match
+WHERE estado='pendiente' AND jurisdiccion='caba'
+  AND ABS(neto_esperado_caba - <importe>) <= 100000
+ORDER BY diff;
 ```
 
-**Decisión**:
-- **0 matches** → `match_estado='sin_match'`, dejar `notas='Depósito DEP JUDI sin giro pendiente que matchee'`. Sospechoso: revisar manual.
-- **1 match** →
-  ```sql
-  UPDATE giros_honorarios SET fecha_girado=<fecha_banco>, estado='girado' WHERE id=<match_id>;
-  UPDATE movimientos_banco SET giro_honorario_id=<match_id>, match_estado='match_unico' WHERE id=<mov_id>;
-  ```
-  El trigger SQL recalcula `mes_imputacion` automáticamente.
-- **2+ matches** → guardar candidatos en `match_candidatos` JSONB:
-  ```sql
-  UPDATE movimientos_banco
-  SET match_estado='match_multiple',
-      match_candidatos='[{"giro_id":X,"neto":Y,"diff":Z},...]'::jsonb
-  WHERE id=<mov_id>;
-  ```
-  Mati resuelve en la app `giros-app`.
+**Decisión** (en este orden):
+
+1. **1 match con diff ≤ $5** → `match_estado='match_unico'`, auto-aplicar.
+2. **2+ matches con diff ≤ $5** → `match_estado='match_multiple'`, guardar candidatos. Mati elige en la app.
+3. **0 matches con diff ≤ $5, pero 1 con diff $5-$100k** → `match_estado='asignado_manual'` automático (el banco erró pero hay un único candidato). Agregar nota: `'Match con diff $X – banco erró el monto'`.
+4. **0 con diff ≤ $5, pero 2+ con diff $5-$100k** → `match_estado='match_multiple'`, guardar todos los candidatos en JSONB con su diff. Mati elige.
+5. **0 matches con diff ≤ $100k** → `match_estado='sin_match'`, nota `'Depósito sin giro pendiente que matchee dentro de $100k'`. Sospechoso: probable giro de Provincia (MEV) o cesión no cargada.
+
+```sql
+-- caso match único (cualquier tolerancia):
+UPDATE giros_honorarios SET fecha_girado=<fecha_banco>, estado='girado' WHERE id=<match_id>;
+UPDATE movimientos_banco
+SET giro_honorario_id=<match_id>,
+    match_estado = CASE WHEN <diff> <= 5 THEN 'match_unico' ELSE 'asignado_manual' END,
+    notas = CASE WHEN <diff> <= 5 THEN NULL ELSE 'Banco erró el monto, diff $' || <diff>::text END
+WHERE id=<mov_id>;
+```
 
 ### Paso 8 — Resumen mensual y semáforo
 
