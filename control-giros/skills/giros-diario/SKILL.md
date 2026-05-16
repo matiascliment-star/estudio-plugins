@@ -99,21 +99,38 @@ SELECT
 
 ### Paso 3 — Pasada B: proveídos MEV + PJN
 
-```sql
-SELECT id, expediente_id, fecha_movimiento, descripcion, texto_completo
-FROM movimientos_judicial
-WHERE created_at > '<last_mov>'
-  AND (texto_completo ILIKE '%transferencia%' OR texto_completo ILIKE '%libranza%'
-       OR texto_completo ILIKE '%transfi%'    OR texto_completo ILIKE '%libr%giro%');
+**FILTRO ESTRICTO**: solo proveídos que tengan `"líbrese giro electrónico"` Y mencionen a `"GARCIA CLIMENT"` (con o sin tilde) como destinatario. Esto descarta ~95% del ruido (giros a peritos, oficios entre cuentas, daciones en pago sin orden al letrado).
 
-SELECT id, expediente_id, fecha_movimiento, descripcion, texto_completo
+Las columnas reales son: `texto_proveido` (MEV) y `texto_documento` (PJN). NO `texto_completo`.
+
+```sql
+-- MEV
+SELECT id, expediente_id, fecha, descripcion, texto_proveido
+FROM movimientos_judicial
+WHERE fecha > '<last_mov_date>'
+  AND texto_proveido ~* 'l[ií]brese\s+giro\s+electr[oó]nico'
+  AND texto_proveido ~* 'GARC[IÍ]A\s+CLIMENT'
+  AND NOT EXISTS (SELECT 1 FROM giros_honorarios gh WHERE gh.movimiento_id = movimientos_judicial.id::TEXT)
+  AND NOT EXISTS (SELECT 1 FROM giros_capital gc WHERE gc.movimiento_id = movimientos_judicial.id::TEXT);
+
+-- PJN (mismo patrón pero texto_documento)
+SELECT id, expediente_id, fecha, descripcion, texto_documento
 FROM movimientos_pjn
-WHERE created_at > '<last_mov>'
-  AND (texto_completo ILIKE '%transferencia%' OR texto_completo ILIKE '%libranza%'
-       OR texto_completo ILIKE '%transfi%'    OR texto_completo ILIKE '%libr%giro%');
+WHERE fecha > '<last_mov_date>'
+  AND texto_documento ~* 'l[ií]brese\s+giro\s+electr[oó]nico'
+  AND texto_documento ~* 'GARC[IÍ]A\s+CLIMENT'
+  AND NOT EXISTS (SELECT 1 FROM giros_honorarios gh WHERE gh.movimiento_id = movimientos_pjn.id::TEXT)
+  AND NOT EXISTS (SELECT 1 FROM giros_capital gc WHERE gc.movimiento_id = movimientos_pjn.id::TEXT);
 ```
 
 Procesar igual que pasada A. `fuente='proveido_mev'`/`'proveido_pjn'`, `movimiento_id`=id del mov.
+
+**Match cruzado WA ↔ proveído** (importante):
+Antes de insertar un giro `proveido_pjn`/`proveido_mev`, chequear si ya existe en `giros_honorarios` un giro `wa_noe` con:
+- Mismo `expediente_numero` normalizado (sin "CNT ", sin "/CA001" final).
+- `ABS(monto_total - existente.monto_total) <= 10`.
+
+Si encuentra match → **UPDATE** del giro `wa_noe` existente: setear `movimiento_id` con el id del proveído, opcionalmente actualizar `concepto_texto` si el proveído tiene más detalle. NO insertar fila nueva. Esto mantiene trazabilidad cruzada entre las 2 fuentes.
 
 ### Paso 4 — Pasada C: mails Banco Ciudad (Hotmail) — vía pg_net + Edge Function
 
@@ -225,6 +242,8 @@ WHERE gc.expediente_id IS NULL AND gc.expediente_numero IS NOT NULL
 Si queda sin matchear, no es bloqueante.
 
 ### Paso 7 — Match banco ↔ giros (autoset `fecha_girado`)
+
+**Importante**: este paso procesa **TODOS** los `movimientos_banco` con `match_estado='sin_match'`, no solo los nuevos. Esto permite que cuando se carga un giro retroactivo (por back-fill o por carga manual), el match se haga automáticamente sin intervención.
 
 Para cada `movimientos_banco` con `signo='credito'`, `match_estado='sin_match'`, detalle LIKE `%DEP JUDI%` o `%DEPOSITO JUDICIAL%`:
 
