@@ -99,38 +99,42 @@ SELECT
 
 ### Paso 3 — Pasada B: proveídos MEV + PJN
 
-**FILTRO ESTRICTO**: solo proveídos que tengan `"líbrese giro electrónico"` Y mencionen a `"GARCIA CLIMENT"` (con o sin tilde) como destinatario. Esto descarta ~95% del ruido (giros a peritos, oficios entre cuentas, daciones en pago sin orden al letrado).
+**Filtro mínimo**: solo proveídos que tengan **monto explícito en formato dinero** (`$X.XXX,XX`). En la ventana diaria son ~10-50 candidatos, manejable para que el LLM clasifique todo. NO filtrar por "líbrese giro electrónico" ni por destinatario — el LLM decide si es honorarios, capital o descartar.
 
-Las columnas reales son: `texto_proveido` (MEV) y `texto_documento` (PJN). NO `texto_completo`.
+Columnas reales: `texto_proveido` (MEV) y `texto_documento` (PJN). NO `texto_completo`.
 
 ```sql
 -- MEV
 SELECT id, expediente_id, fecha, descripcion, texto_proveido
 FROM movimientos_judicial
 WHERE fecha > '<last_mov_date>'
-  AND texto_proveido ~* 'l[ií]brese\s+giro\s+electr[oó]nico'
-  AND texto_proveido ~* 'GARC[IÍ]A\s+CLIMENT'
+  AND texto_proveido ~* '\$\s*[\d.]+,\d{2}'
   AND NOT EXISTS (SELECT 1 FROM giros_honorarios gh WHERE gh.movimiento_id = movimientos_judicial.id::TEXT)
   AND NOT EXISTS (SELECT 1 FROM giros_capital gc WHERE gc.movimiento_id = movimientos_judicial.id::TEXT);
 
--- PJN (mismo patrón pero texto_documento)
+-- PJN
 SELECT id, expediente_id, fecha, descripcion, texto_documento
 FROM movimientos_pjn
 WHERE fecha > '<last_mov_date>'
-  AND texto_documento ~* 'l[ií]brese\s+giro\s+electr[oó]nico'
-  AND texto_documento ~* 'GARC[IÍ]A\s+CLIMENT'
+  AND texto_documento ~* '\$\s*[\d.]+,\d{2}'
   AND NOT EXISTS (SELECT 1 FROM giros_honorarios gh WHERE gh.movimiento_id = movimientos_pjn.id::TEXT)
   AND NOT EXISTS (SELECT 1 FROM giros_capital gc WHERE gc.movimiento_id = movimientos_pjn.id::TEXT);
 ```
 
-Procesar igual que pasada A. `fuente='proveido_mev'`/`'proveido_pjn'`, `movimiento_id`=id del mov.
+**Clasificación (vos, el LLM)**:
+Para cada candidato, leer el texto y decidir:
+- **Honorarios al estudio** → `giros_honorarios`. Señales: "líbrese giro electrónico" a favor de "GARCIA CLIMENT" / "MATIAS CHRISTIAN".
+- **Capital al actor** → `giros_capital`. Señales: "líbrese giro" / "transfiérase" al ACTOR (nombre que aparece en la carátula), en concepto de "capital", "crédito laboral", "indemnización", "no imponible".
+- **Descartar**: giro a perito, dación en pago sin orden de giro al letrado, inversión a plazo fijo, oficios entre cuentas, escritos del estudio pidiendo cosas (no son proveídos del juez), cualquier cosa sin orden de transferencia firme.
+
+Procesar como Pasada A. `fuente='proveido_mev'`/`'proveido_pjn'`, `movimiento_id`=id del mov.
 
 **Match cruzado WA ↔ proveído** (importante):
-Antes de insertar un giro `proveido_pjn`/`proveido_mev`, chequear si ya existe en `giros_honorarios` un giro `wa_noe` con:
+Antes de insertar un giro nuevo (sea de honorarios o capital), chequear si ya existe uno `wa_noe` con:
 - Mismo `expediente_numero` normalizado (sin "CNT ", sin "/CA001" final).
 - `ABS(monto_total - existente.monto_total) <= 10`.
 
-Si encuentra match → **UPDATE** del giro `wa_noe` existente: setear `movimiento_id` con el id del proveído, opcionalmente actualizar `concepto_texto` si el proveído tiene más detalle. NO insertar fila nueva. Esto mantiene trazabilidad cruzada entre las 2 fuentes.
+Si encuentra match → **UPDATE** del giro `wa_noe` existente: setear `movimiento_id` con el id del proveído, opcionalmente actualizar `concepto_texto` si el proveído tiene más detalle. NO insertar fila nueva. Mantiene trazabilidad cruzada entre las 2 fuentes.
 
 ### Paso 4 — Pasada C: mails Banco Ciudad (Hotmail) — vía pg_net + Edge Function
 
